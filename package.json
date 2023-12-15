@@ -1,0 +1,21 @@
+{
+  "name": "com.dasfaust.universaltoonpbr",
+  "version": "1.0.0",
+  "displayName": "UniversalToonPBR",
+  "description": "A toon PBR shader",
+  "unity": "2022.3",
+  "documentationUrl": "https://github.com/Dasfaust/UniversalToonPBR",
+  "changelogUrl": "https://github.com/Dasfaust/UniversalToonPBR/commits/main/",
+  "licensesUrl": "All Rights Reserved",
+  "dependencies": {},
+ "keywords": [
+    "shader",
+    "toon",
+    "pbr"
+  ],
+  "author": {
+    "name": "Cody Caudill",
+    "email": "ccaud@proton.me",
+    "url": "https://ccaud.dev"
+  }
+}
