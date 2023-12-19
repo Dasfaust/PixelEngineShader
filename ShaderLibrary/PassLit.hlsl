@@ -94,9 +94,6 @@ float4 Fragment(Interpolators input
         return float4(SampleSceneNormal(lightingInput.screenUV), 1);
     #endif
 
-    lightingInput.albedo = diffuseColor.rgb;
-    lightingInput.alpha = diffuseColor.a;
-
     #if defined(_OUTLINES_ENABLED)
         #if defined(_OUTLINES_LIGHTING_EMISSIVE) || defined(_OUTLINES_LIGHTING_UNLIT)
             float4 outlineColor = BlendOutlines(diffuseColor, _OuterOutlineColor, _InnerOutlineColor, lightingInput.screenUV, _OutlineSize, _OuterOutlineThreshold, _InnerOutlineThreshold, _InnerOutlineBias.xyz);
@@ -108,6 +105,9 @@ float4 Fragment(Interpolators input
             return diffuseColor;
         #endif
     #endif
+
+    lightingInput.albedo = diffuseColor.rgb;
+    lightingInput.alpha = diffuseColor.a;
 
     float3 normalTS = SampleNormalMap(uv);
     float3x3 tangentToWorld = CreateTangentToWorld(lightingInput.normalWS, input.tangentWS.xyz, input.tangentWS.w);

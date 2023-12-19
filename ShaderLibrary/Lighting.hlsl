@@ -153,15 +153,15 @@ void CalculateAttenuationAdditionalLight(ToonLightingInput data, Light light, ui
     float distanceSqr = max(dot(lightVector, lightVector), HALF_MIN);
 
     // Point
-	float range = rsqrt(distanceAndSpotAttenuation.x);
-	float dist = sqrt(distanceSqr) / range;
+    float range = rsqrt(distanceAndSpotAttenuation.x);
+    float dist = sqrt(distanceSqr) / range;
     float pointAtten = saturate(1.0f - dist);
 
-	// Spot
-	half3 lightDirection = half3(lightVector * rsqrt(distanceSqr));
-	half SdotL = dot(spotDirection.xyz, lightDirection);
-	half spotAtten = saturate(SdotL * distanceAndSpotAttenuation.z + distanceAndSpotAttenuation.w);
-	spotAtten *= spotAtten;
+    // Spot
+    half3 lightDirection = half3(lightVector * rsqrt(distanceSqr));
+    half SdotL = dot(spotDirection.xyz, lightDirection);
+    half spotAtten = saturate(SdotL * distanceAndSpotAttenuation.z + distanceAndSpotAttenuation.w);
+    spotAtten *= spotAtten;
 
     #if defined(_ENABLE_QUANTIZATION)
         float maskSpotToRange = step(dist, 1);
