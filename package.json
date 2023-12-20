@@ -1,5 +1,5 @@
 {
-  "name": "com.dasfaust.universaltoonpbr",
+  "name": "me.dasfaust.universaltoonpbr",
   "version": "1.0.0",
   "displayName": "UniversalToonPBR",
   "description": "A toon PBR shader",
@@ -16,6 +16,6 @@
   "author": {
     "name": "Cody Caudill",
     "email": "ccaud@proton.me",
-    "url": "https://ccaud.dev"
+    "url": "https://dasfaust.me"
   }
 }
