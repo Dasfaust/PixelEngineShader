@@ -10,4 +10,4 @@ A URP Forward+/SRP Batcher/DOTS instancing compatible PBR toon shader
 * Parallax mapping support
 * Emission support
 * Robust per-object outlines; edge and inner colors, lighting support, multiple blending modes, and emission support
-* Transparency, billboarding, and foiliage support
+* Transparency, billboarding, and foliage support
