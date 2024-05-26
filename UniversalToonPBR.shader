@@ -3,6 +3,7 @@ Shader "UniversalToonPBR"
     Properties
     {
         [Header(Surface Options)]
+        [KeywordEnum(None, Upscaled)] _Texture_Sampling_Type("Texture Sampling Type", float) = 0
         [MainTexture][NoScaleOffset] _DiffuseMap("Diffuse Map", 2D) = "white" { }
         [MainColor] _DiffuseColor("Diffuse Base Color", color) = (1, 1, 1, 1)
         [Normal][NoScaleOffset] _NormalMap("Normal Map", 2D) = "bump" { }
@@ -109,6 +110,7 @@ Shader "UniversalToonPBR"
                 #pragma shader_feature_local_fragment _OUTLINES_BLENDING_OVERLAY _OUTLINES_BLENDING_OVERWRITE
                 #pragma shader_feature_local_fragment _ _OUTLINES_LIGHTING_UNLIT _OUTLINES_LIGHTING_EMISSIVE
                 #pragma shader_feature_local_fragment _ _DEBUG_DEPTH _DEBUG_NORMALS _DEBUG_OUTLINES
+                #pragma shader_feature_local_fragment _ _TEXTURE_SAMPLING_TYPE_UPSCALED
 
                 // com.unity.render-pipelines.universal/Shaders/Lit.shader#L136
                 #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN

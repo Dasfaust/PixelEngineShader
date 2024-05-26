@@ -18,6 +18,9 @@ TEXTURE2D(_RampMap);
 SAMPLER(sampler_RampMap);
 
 CBUFFER_START(UnityPerMaterial)
+    float4 _DiffuseMap_TexelSize;
+    float4 _NormalMap_TexelSize;
+    float4 _EmissionMap_TexelSize;
     float4 _MaskMap_TexelSize;
     float _Cutoff;
     float4 _DiffuseColor;
@@ -93,18 +96,39 @@ float2 AdjustUVParallaxMapping(float2 atlasUv, float4 tangentWS, float3 normalWS
     return uv;
 }
 
+// https://www.youtube.com/watch?v=d6tp43wZqps
+float2 UpscaleUVs(float2 atlasUv, float4 texelSize)
+{
+    float2 boxSize = clamp(fwidth(atlasUv) * texelSize.zw, 1e-5, 1);
+    float2 tx = atlasUv * texelSize.zw - 0.5 * boxSize;
+    float2 txOffset = smoothstep(1 - boxSize, 1, frac(tx));
+    return (floor(tx) + 0.5 + txOffset) * texelSize.xy;
+}
+
 float4 SampleDiffuseColor(float2 atlasUv)
 {
+    #if defined(_TEXTURE_SAMPLING_TYPE_UPSCALED)
+        return SAMPLE_TEXTURE2D_GRAD(_DiffuseMap, sampler_DiffuseMap, UpscaleUVs(atlasUv, _DiffuseMap_TexelSize), ddx(atlasUv), ddy(atlasUv));
+    #endif
+
     return SAMPLE_TEXTURE2D_LOD(_DiffuseMap, sampler_DiffuseMap, atlasUv, 0) * _DiffuseColor;
 }
 
 float4 SampleEmissionColor(float2 atlasUv)
 {
+    #if defined(_TEXTURE_SAMPLING_TYPE_UPSCALED)
+        return SAMPLE_TEXTURE2D_GRAD(_EmissionMap, sampler_EmissionMap, UpscaleUVs(atlasUv, _EmissionMap_TexelSize), ddx(atlasUv), ddy(atlasUv));
+    #endif
+
     return SAMPLE_TEXTURE2D_LOD(_EmissionMap, sampler_EmissionMap, atlasUv, 0) * _EmissionColor;
 }
 
 float4 SampleMaskMap(float2 atlasUv)
 {
+    #if defined(_TEXTURE_SAMPLING_TYPE_UPSCALED)
+        return SAMPLE_TEXTURE2D_GRAD(_MaskMap, sampler_MaskMap, UpscaleUVs(atlasUv, _MaskMap_TexelSize), ddx(atlasUv), ddy(atlasUv));
+    #endif
+
     return SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, atlasUv, 0);
 }
 
@@ -136,6 +160,10 @@ float3 SampleNormalMap(float2 atlasUv)
     #if defined(_HEIGHT_TO_NORMALS)
         return GenerateNormalFromHeightMap(atlasUv);
     #else
+        #if defined(_TEXTURE_SAMPLING_TYPE_UPSCALED)
+            return UnpackNormalScale(SAMPLE_TEXTURE2D_GRAD(_NormalMap, sampler_NormalMap, UpscaleUVs(atlasUv, _NormalMap_TexelSize), ddx(atlasUv), ddy(atlasUv)), _NormalStrength);
+        #endif
+
         return UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, atlasUv), _NormalStrength);
     #endif
 }
