@@ -104,7 +104,7 @@ half3 GlobalIllumination(BRDFData brdfData, half3 bakedGI, half occlusion, float
     half3 reflectVector = reflect(-viewDirectionWS, normalWS);
     half NdotV = saturate(dot(normalWS, viewDirectionWS));
 
-    #if defined(_ENABLE_QUANTIZATION)
+    #if defined(_ENABLE_GI_QUANTIZATION)
         NdotV = Quantize(NdotV, 0, _DiffuseQuantization);
     #endif
 

@@ -32,6 +32,7 @@ Shader "UniversalToonPBR"
         [KeywordEnum(BRDF, BlinnPhong)] _Lighting_Model("Lighting Model", float) = 0
         [Toggle(_ADDITIONAL_LIGHTS_MODEL_NONE)] _AdditionalLightsModelNone("Additional Lights Additive Only", float) = 0
         [Toggle(_ENABLE_QUANTIZATION)] _EnableQuantization("Enable Quantization", float) = 1
+        [Toggle(_ENABLE_GI_QUANTIZATION)] _EnableGIQuantization("Enable GI Quantization", float) = 0
         [KeywordEnum(Linear, Ramp)] _Quantization_Type("Quantization Type", float) = 0
         [NoScaleOffset] _RampMap("Ramp Map", 2D) = "white" { }
         _MinLinearBrightness("Minimum Linear Brightness", Range(0, 1)) = 0.025
@@ -104,6 +105,7 @@ Shader "UniversalToonPBR"
                 #pragma shader_feature_local_fragment _ _LIGHTING_MODEL_BLINNPHONG
                 #pragma shader_feature_local_fragment _ _ADDITIONAL_LIGHTS_MODEL_NONE
                 #pragma shader_feature_local_fragment _ _ENABLE_QUANTIZATION
+                #pragma shader_feature_local_fragment _ _ENABLE_GI_QUANTIZATION
                 #pragma shader_feature_local_fragment _ _QUANTIZATION_TYPE_RAMP
                 #pragma shader_feature_local_fragment _ _OUTLINES_ENABLED
                 #pragma shader_feature_local_fragment _ _OUTLINES_PERSPECTIVE
