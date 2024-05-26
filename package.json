@@ -6,7 +6,7 @@
   "unity": "2022.3",
   "documentationUrl": "https://github.com/Dasfaust/UniversalToonPBR",
   "changelogUrl": "https://github.com/Dasfaust/UniversalToonPBR/commits/main/",
-  "licensesUrl": "All Rights Reserved",
+  "licensesUrl": "https://raw.githubusercontent.com/Dasfaust/UniversalToonPBR/main/LICENSE",
   "dependencies": {},
  "keywords": [
     "shader",
