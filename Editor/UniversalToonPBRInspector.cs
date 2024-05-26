@@ -43,7 +43,7 @@ namespace UniversalToonPBR
         {
             base.AssignNewShaderToMaterial(material, oldShader, newShader);
 
-            if (newShader.name == "TFOM/Toon")
+            if (newShader.name == "UniversalToonPBR")
             {
                 UpdateSurfaceType(material);
                 UpdateHeightMode(material);
