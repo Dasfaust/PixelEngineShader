@@ -3,7 +3,7 @@ Shader "UniversalToonPBR"
     Properties
     {
         [Header(Surface Options)]
-        [KeywordEnum(None, Upscaled)] _Texture_Sampling_Type("Texture Sampling Type", float) = 0
+        [KeywordEnum(Upscaled, None)] _Texture_Sampling_Type("Texture Sampling Type", float) = 0
         [MainTexture][NoScaleOffset] _DiffuseMap("Diffuse Map", 2D) = "white" { }
         [MainColor] _DiffuseColor("Diffuse Base Color", color) = (1, 1, 1, 1)
         [Normal][NoScaleOffset] _NormalMap("Normal Map", 2D) = "bump" { }
