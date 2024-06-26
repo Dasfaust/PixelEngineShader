@@ -1,5 +1,5 @@
-# Universal Toon PBR
-A URP Forward+/SRP Batcher/DOTS instancing compatible PBR toon shader
+# Pixel Engine Shader
+A URP Forward+/SRP Batcher/DOTS instancing compatible PBR-esque toon shader
 
 ## Preview
 ![preview](https://github.com/Dasfaust/UniversalToonPBR/blob/main/Docs/hazmat.gif?raw=true)
