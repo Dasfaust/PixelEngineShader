@@ -1,4 +1,4 @@
-Shader "UniversalToonPBR"
+Shader "PixelEngineLit"
 {
     Properties
     {
@@ -206,5 +206,5 @@ Shader "UniversalToonPBR"
         }
     }
 
-    CustomEditor "UniversalToonPBR.UniversalToonPBRInspector"
+    CustomEditor "PixelEngine.PixelEngineInspector"
 }

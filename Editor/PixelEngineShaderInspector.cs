@@ -2,9 +2,9 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace UniversalToonPBR
+namespace PixelEngine
 {
-    public class UniversalToonPBRInspector : ShaderGUI
+    public class PixelEngineShaderInspector : ShaderGUI
     {
         public enum SurfaceType
         {
@@ -43,7 +43,7 @@ namespace UniversalToonPBR
         {
             base.AssignNewShaderToMaterial(material, oldShader, newShader);
 
-            if (newShader.name == "UniversalToonPBR")
+            if (newShader.name == "PixelEngineLit")
             {
                 UpdateSurfaceType(material);
                 UpdateHeightMode(material);
