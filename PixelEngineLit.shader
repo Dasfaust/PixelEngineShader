@@ -206,5 +206,5 @@ Shader "PixelEngineLit"
         }
     }
 
-    CustomEditor "PixelEngine.PixelEngineInspector"
+    CustomEditor "PixelEngine.PixelEngineShaderInspector"
 }
