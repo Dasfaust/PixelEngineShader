@@ -1,5 +1,5 @@
 # Pixel Engine Shader
-A URP Forward+/SRP Batcher/DOTS instancing compatible PBR-esque toon shader
+A URP Forward+/SRP Batcher/DOTS instancing compatible PBR-esque toon shader made for use with [PixelEngine](https://github.com/Dasfaust/PixelEngine), but it can be used in any project!
 
 ## Preview
 ![preview](https://github.com/Dasfaust/UniversalToonPBR/blob/main/Docs/hazmat.gif?raw=true)
