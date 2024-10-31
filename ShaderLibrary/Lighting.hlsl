@@ -52,7 +52,7 @@ void BlinnPhong(ToonLightingInput data, Light light, inout LightingResult result
     float specular = PhongAttenuation(data, light);
 
     #if defined(_ENABLE_QUANTIZATION)
-        diffuse = QuantizeAndRemap(diffuse, 0, _DiffuseQuantization, _MinLinearBrightness);
+        diffuse = Quantize(diffuse, 0, _DiffuseQuantization);
         specular = Quantize(specular, 1, _SpecularQuantization);
     #endif
 
@@ -85,11 +85,11 @@ void BRDF(ToonLightingInput data, BRDFData brdfData, Light light, inout Lighting
     float phongSpecularAttenuation = PhongAttenuation(data, light);
 
     #if defined(_ENABLE_QUANTIZATION)
-        blinnDiffuseAttenuation = QuantizeAndRemap(blinnDiffuseAttenuation, 0, _DiffuseQuantization, _MinLinearBrightness);
+        blinnDiffuseAttenuation = Quantize(blinnDiffuseAttenuation, 0, _DiffuseQuantization);
         phongSpecularAttenuation = Quantize(phongSpecularAttenuation, 1, _SpecularQuantization);
     #endif
 
-    float3 radiance = light.color * (blinnDiffuseAttenuation * result.currentAttenuation);
+    float3 radiance = light.color * Remap(blinnDiffuseAttenuation * result.currentAttenuation, float2(0, 1), float2(_MinLinearBrightness, 1));
 
     float3 color = brdfData.diffuse;
     color += brdfData.specular * phongSpecularAttenuation;
@@ -102,13 +102,12 @@ void BRDF(ToonLightingInput data, BRDFData brdfData, Light light, inout Lighting
 half3 GlobalIllumination(BRDFData brdfData, half3 bakedGI, half occlusion, float3 positionWS, half3 normalWS, half3 viewDirectionWS, float2 normalizedScreenSpaceUV)
 {
     half3 reflectVector = reflect(-viewDirectionWS, normalWS);
-    half NdotV = saturate(dot(normalWS, viewDirectionWS));
-
+    half NdotV = Remap(saturate(dot(normalWS, viewDirectionWS)), float2(0, 1), float2(_MinLinearBrightness, 1));
+    half fresnelTerm = Pow4(1.0 - NdotV);
+    
     #if defined(_ENABLE_GI_QUANTIZATION)
         NdotV = Quantize(NdotV, 0, _DiffuseQuantization);
     #endif
-
-    half fresnelTerm = Pow4(1.0 - NdotV);
 
     half3 indirectDiffuse = bakedGI;
     half3 indirectSpecular = GlossyEnvironmentReflection(reflectVector, positionWS, brdfData.perceptualRoughness, 1.0h, normalizedScreenSpaceUV);
@@ -231,7 +230,6 @@ LightingResult CalculateLighting(ToonLightingInput data)
     MixRealtimeAndBakedGI(mainLight, data.normalWS, data.bakedGI);
     inputData.bakedGI = data.bakedGI;
     BRDFData brdfData = (BRDFData)0;
-    BRDFData brdfClearcoat = (BRDFData)0;
     InitBRDFData(data, brdfData);
     result.mixedColor = GlobalIllumination(brdfData, inputData.bakedGI, aoFactor.indirectAmbientOcclusion, inputData.positionWS, inputData.normalWS, inputData.viewDirectionWS, inputData.normalizedScreenSpaceUV);
 
