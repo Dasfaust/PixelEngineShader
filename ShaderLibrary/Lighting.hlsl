@@ -67,7 +67,7 @@ void InitBRDFData(ToonLightingInput lightData, inout BRDFData data)
     half oneMinusReflectivity = OneMinusReflectivityMetallic(lightData.metallic);
     data.reflectivity = 1.0f - oneMinusReflectivity;
     data.diffuse = (lightData.albedo * oneMinusReflectivity) * lightData.alpha;
-    data.specular = lerp(kDieletricSpec.rgb, lightData.albedo, lightData.metallic);
+    data.specular = lerp(kDielectricSpec.rgb, lightData.albedo, lightData.metallic);
     data.perceptualRoughness = PerceptualSmoothnessToPerceptualRoughness(lightData.smoothness);
     data.roughness = max(PerceptualRoughnessToRoughness(data.perceptualRoughness), HALF_MIN_SQRT);
     data.roughness2 = max(data.roughness * data.roughness, HALF_MIN);
@@ -77,7 +77,7 @@ void InitBRDFData(ToonLightingInput lightData, inout BRDFData data)
 }
 
 // Modified microfacet bidirectional reflectance distribution function
-// (i.e. PBR, but it is a mash up between Blinn-Phong and PBR)
+// (i.e. PBR, but it is a mashup between Blinn-Phong and PBR)
 // com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl#L39
 void BRDF(ToonLightingInput data, BRDFData brdfData, Light light, inout LightingResult result)
 {
@@ -242,7 +242,7 @@ LightingResult CalculateLighting(ToonLightingInput data)
 
         // com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl#L296
         #if USE_FORWARD_PLUS
-            for (uint lightIndex = 0; lightIndex < min(URP_FP_DIRECTIONAL_LIGHTS_COUNT, MAX_VISIBLE_LIGHTS); lightIndex++)
+            [loop] for (uint lightIndex = 0; lightIndex < min(URP_FP_DIRECTIONAL_LIGHTS_COUNT, MAX_VISIBLE_LIGHTS); lightIndex++)
             {
                 FORWARD_PLUS_SUBTRACTIVE_LIGHT_CHECK
 
@@ -250,7 +250,7 @@ LightingResult CalculateLighting(ToonLightingInput data)
                 Light additionalLight = GetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
 
                 #ifdef _LIGHT_LAYERS
-                    if (IsMatchingLightLayer(light.layerMask, meshRenderingLayers))
+                    if (IsMatchingLightLayer(additionalLight.layerMask, meshRenderingLayers))
                 #endif
                 {
                     HandleAdditionalLight(data, brdfData, additionalLight, lightIndex, result);
@@ -263,7 +263,7 @@ LightingResult CalculateLighting(ToonLightingInput data)
             Light additionalLight = GetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
 
             #ifdef _LIGHT_LAYERS
-                if (IsMatchingLightLayer(light.layerMask, meshRenderingLayers))
+                if (IsMatchingLightLayer(additionalLight.layerMask, meshRenderingLayers))
             #endif
             {
                 HandleAdditionalLight(data, brdfData, additionalLight, lightIndex, result);
@@ -272,7 +272,7 @@ LightingResult CalculateLighting(ToonLightingInput data)
     #endif
 
     #ifdef _LIGHT_LAYERS
-        if (IsMatchingLightLayer(light.layerMask, meshRenderingLayers))
+        if (IsMatchingLightLayer(mainLight.layerMask, meshRenderingLayers))
     #endif
     {
         // Add in the main light last since we're changing its shadow attenuation
