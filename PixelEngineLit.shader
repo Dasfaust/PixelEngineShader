@@ -35,7 +35,7 @@ Shader "PixelEngineLit"
         [Toggle(_ENABLE_GI_QUANTIZATION)] _EnableGIQuantization("Enable GI Quantization", float) = 0
         [KeywordEnum(Linear, Ramp)] _Quantization_Type("Quantization Type", float) = 0
         [NoScaleOffset] _RampMap("Ramp Map", 2D) = "white" { }
-        _MinLinearBrightness("Minimum Linear Brightness", Range(0, 1)) = 0.025
+        _MinLinearBrightness("Minimum Linear Brightness", Range(0, 1)) = 0
         _DiffuseQuantization("Diffuse Quantization", float) = 4
         _SpecularQuantization("Specular Quantization", float) = 4
         _PointQuantization("Point Light Quantization", float) = 6
