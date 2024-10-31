@@ -108,7 +108,7 @@ float2 UpscaleUVs(float2 atlasUv, float4 texelSize)
 float4 SampleDiffuseColor(float2 atlasUv)
 {
     #if defined(_TEXTURE_SAMPLING_TYPE_UPSCALED)
-        return SAMPLE_TEXTURE2D_GRAD(_DiffuseMap, sampler_DiffuseMap, UpscaleUVs(atlasUv, _DiffuseMap_TexelSize), ddx(atlasUv), ddy(atlasUv));
+        return SAMPLE_TEXTURE2D_GRAD(_DiffuseMap, sampler_DiffuseMap, UpscaleUVs(atlasUv, _DiffuseMap_TexelSize), ddx(atlasUv), ddy(atlasUv)) * _DiffuseColor;
     #endif
 
     return SAMPLE_TEXTURE2D_LOD(_DiffuseMap, sampler_DiffuseMap, atlasUv, 0) * _DiffuseColor;
