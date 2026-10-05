@@ -11,6 +11,19 @@ float3 FlipNormalBasedOnViewDir(float3 normalWS, float3 positionWS)
     return normalWS * (dot(normalWS, viewDirWS) < 0 ? -1 : 1);
 }
 
+float4 PixelStabilizationShadowClip(float4 shadowClip)
+{
+    float texelSize = 2.0 / _ShadowMapTexture_TexelSize.z;
+    shadowClip.xy = floor(shadowClip.xy / texelSize) * texelSize;
+    return shadowClip;
+}
+
+float2 StabilizeShadowUV(float2 uv)
+{
+    float texel = 1.0 / _ShadowMapTexture_TexelSize.z;
+    return floor(uv / texel) * texel;
+}
+
 float3 _LightDirection;
 float3 _LightPosition;
 float4 GetShadowCasterPositionCS(float3 positionWS, float3 normalWS)
@@ -59,7 +72,12 @@ Interpolators Vertex(Attributes input)
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
-    VertexPositionInputs positionInputs = GetVertexPositionInputs(input.positionOS);
+    VertexPositionInputs positionInputs = _GetVertexPositionInputs(input.positionOS);
+    
+    #if defined(_PIXEL_STABILIZATION_ORTHOGRAPHIC)
+    positionInputs.positionCS = PixelStabilizationShadowClip(positionInputs.positionCS);
+    #endif
+    
     VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS);
     #if defined(_BILLBOARDING_CYLINDRICAL)
         VertexPositionInputs billboardedInputs = CylindricalBillboard(input.positionOS, positionInputs.positionWS);
@@ -76,8 +94,13 @@ Interpolators Vertex(Attributes input)
 float4 Fragment(Interpolators input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
-
+    
+    #if defined(_PIXEL_STABILIZATION_ORTHOGRAPHIC)
+    float4 diffuseColor = SampleDiffuseColor(StabilizeShadowUV(input.uv));
+    #else
     float4 diffuseColor = SampleDiffuseColor(input.uv);
+    #endif
+    
     TestAlphaClip(diffuseColor);
 
     return 0;

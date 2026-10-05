@@ -38,7 +38,7 @@ Interpolators Vertex(Attributes input)
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
-    VertexPositionInputs positionInputs = GetVertexPositionInputs(input.positionOS);
+    VertexPositionInputs positionInputs = _GetVertexPositionInputs(input.positionOS);
     output.positionCS = positionInputs.positionCS;
     output.positionWS = positionInputs.positionWS;
 

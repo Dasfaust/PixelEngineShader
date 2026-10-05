@@ -35,14 +35,15 @@ Interpolators Vertex(Attributes input)
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
-    VertexPositionInputs positionInputs = GetVertexPositionInputs(input.positionOS);
+    VertexPositionInputs positionInputs = _GetVertexPositionInputs(input.positionOS);
+    
     output.positionCS = positionInputs.positionCS;
     output.positionWS = positionInputs.positionWS;
 
     #if defined(_BILLBOARDING_CYLINDRICAL)
         float3x3 _mat = CylindricalBillboardMatrix(output.positionWS);
         float3 newPositionOS = mul(_mat, input.positionOS);
-        VertexPositionInputs billboardedInputs = GetVertexPositionInputs(newPositionOS);
+        VertexPositionInputs billboardedInputs = _GetVertexPositionInputs(newPositionOS);
         output.positionCS = billboardedInputs.positionCS;
         output.positionWS = billboardedInputs.positionWS;
 
@@ -77,7 +78,7 @@ float4 Fragment(Interpolators input
     #if defined(_DOUBLE_SIDED_NORMALS)
         lightingInput.normalWS *= IS_FRONT_VFACE(frontFace, 1, -1);
     #endif
-
+    
     lightingInput.viewDirectionWS = GetWorldSpaceNormalizeViewDir(input.positionWS);
 
     float2 uv = AdjustUVParallaxMapping(input.uv, input.tangentWS, lightingInput.normalWS, lightingInput.viewDirectionWS);
@@ -158,6 +159,10 @@ float4 Fragment(Interpolators input
         #endif
     #endif
 
+    #if defined(_COLOR_SPACE_CEILAB)
+    emissedColor = float4(XYZToLab(RGBToXYZ(emissedColor.rgb)), emissedColor.a);
+    #endif
+    
     return emissedColor;
 }
 

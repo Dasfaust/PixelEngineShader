@@ -31,7 +31,12 @@ float3 SampleSceneNormal(float2 screenUv)
 // https://github.com/KodyJKing/hello-threejs
 float4 BlendOutlines(float4 diffuseColor, float4 outerColor, float4 innerColor, float2 screenUv, float thickness, float depthThreshold, float normalThreshold, float3 normalEdgeBias)
 {
+    #if defined(_PIXEL_STABILIZATION_ORTHOGRAPHIC)
+    float fragDepth = QuantizeDepth(SampleSceneDepth(screenUv));
+    #else
     float fragDepth = SampleSceneDepth(screenUv);
+    #endif
+    
     float3 fragNormal = SampleSceneNormal(screenUv);
 
     #if defined(_OUTLINES_PERSPECTIVE)

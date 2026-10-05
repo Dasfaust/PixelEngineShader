@@ -2,7 +2,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace PixelEngine
+namespace PixelEngine.Editor
 {
     public class PixelEngineShaderInspector : ShaderGUI
     {
@@ -22,20 +22,26 @@ namespace PixelEngine
 
             Material material = materialEditor.target as Material;
 
-            var surfaceProp = BaseShaderGUI.FindProperty("_SurfaceType", properties, true);
-            EditorGUI.BeginChangeCheck();
-            surfaceProp.intValue = (int)(SurfaceType)EditorGUILayout.EnumPopup("Surface Type", (SurfaceType)surfaceProp.intValue);
-            if (EditorGUI.EndChangeCheck())
+            var surfaceProp = BaseShaderGUI.FindProperty("_SurfaceType", properties, false);
+            if (surfaceProp != null)
             {
-                UpdateSurfaceType(material);
+                EditorGUI.BeginChangeCheck();
+                surfaceProp.intValue = (int)(SurfaceType)EditorGUILayout.EnumPopup("Surface Type", (SurfaceType)surfaceProp.intValue);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    UpdateSurfaceType(material);
+                }
             }
-
-            var heightProp = BaseShaderGUI.FindProperty("_HeightMode", properties, true);
-            EditorGUI.BeginChangeCheck();
-            heightProp.intValue = (int)(HeightMode)EditorGUILayout.EnumPopup("Height Mode", (HeightMode)heightProp.intValue);
-            if (EditorGUI.EndChangeCheck())
+            
+            var heightProp = BaseShaderGUI.FindProperty("_HeightMode", properties, false);
+            if (heightProp != null)
             {
-                UpdateHeightMode(material);
+                EditorGUI.BeginChangeCheck();
+                heightProp.intValue = (int)(HeightMode)EditorGUILayout.EnumPopup("Height Mode", (HeightMode)heightProp.intValue);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    UpdateHeightMode(material);
+                }
             }
         }
 

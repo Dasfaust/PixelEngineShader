@@ -3,6 +3,7 @@
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ParallaxMapping.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Input.hlsl"
 
 TEXTURECUBE(_SpecularCubemap);
 SAMPLER(sampler_SpecularCubemap);
@@ -18,6 +19,8 @@ TEXTURE2D(_RampMap);
 SAMPLER(sampler_RampMap);
 
 CBUFFER_START(UnityPerMaterial)
+    float4 _MainTex_ST;
+    float4 _MainTex_TexelSize;
     float4 _DiffuseMap_TexelSize;
     float4 _NormalMap_TexelSize;
     float4 _EmissionMap_TexelSize;
@@ -51,6 +54,8 @@ CBUFFER_START(UnityPerMaterial)
     float4 _InnerOutlineColor;
     float _InnerOutlineThreshold;
     float4 _InnerOutlineBias;
+    float4 _ShadowMapTexture_TexelSize;
+    float _PixelsPerUnit;
 CBUFFER_END
 
 #ifdef UNITY_DOTS_INSTANCING_ENABLED
@@ -63,6 +68,7 @@ CBUFFER_END
         UNITY_DOTS_INSTANCED_PROP(float, _OutlineSize)
         UNITY_DOTS_INSTANCED_PROP(float4, _OuterOutlineColor)
         UNITY_DOTS_INSTANCED_PROP(float4, _InnerOutlineColor)
+        UNITY_DOTS_INSTANCED_PROP(float, _PixelsPerUnit)
     UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
 
     #define _DiffuseColor UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _DiffuseColor)
@@ -73,7 +79,90 @@ CBUFFER_END
     #define _OutlineSize UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _OutlineSize)
     #define _OuterOutlineColor UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _OuterOutlineColor)
     #define _InnerOutlineColor UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _InnerOutlineColor)
+    #define _PixelsPerUnit UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PixelsPerUnit)
 #endif
+
+float3 RGBToXYZ(float3 rgb)
+{
+    rgb = pow(rgb, 2.2);
+    
+    float3x3 mat = float3x3(
+        0.4124564, 0.3575761, 0.1804375,
+        0.2126729, 0.7151522, 0.0721750,
+        0.0193339, 0.1191920, 0.9503041
+    );
+    return mul(mat, rgb);
+}
+
+float3 XYZToLab(float3 xyz)
+{
+    xyz /= float3(0.90547, 1.0, 1.08883);
+    
+    float3 f = xyz > 0.008856 ? pow(xyz, 1.0 / 3.0) : (7.787 * xyz + 16.0 / 116.0);
+    
+    float l = 116.0 * f.y - 16.0;
+    float a = 500.0 * (f.x - f.y);
+    float b = 200.0 * (f.y - f.z);
+    
+    return float3(l, a, b);
+}
+
+float3 SnapWorldPositionToPixelGrid(float3 worldPos)
+{
+    // This function snaps a world position to the camera's pixel grid,
+    // accounting for camera rotation. It mirrors the logic from
+    // SubpixelOrthographicCamera.WorldPositionToPixelGrid.
+
+    // Get camera's right and up vectors in world space from the inverse view matrix.
+    float3 right = UNITY_MATRIX_I_V[0].xyz;
+    float3 up    = UNITY_MATRIX_I_V[1].xyz;
+
+    // Project the world position onto the camera's local axes.
+    float projX = dot(worldPos, right);
+    float projY = dot(worldPos, up);
+
+    // Calculate the size of a pixel in world units.
+    float unitsPerPixel = 1.0 / _PixelsPerUnit;
+
+    // Snap the projected coordinates to the pixel grid.
+    float snappedX = floor(projX / unitsPerPixel) * unitsPerPixel;
+    float snappedY = floor(projY / unitsPerPixel) * unitsPerPixel;
+
+    // Subtract the remainder from the original position to get the snapped position.
+    return worldPos - right * (projX - snappedX) - up * (projY - snappedY);
+}
+
+float QuantizeDepth(float depth)
+{
+    float step = 1.0 / 65536.0;
+    return round(depth / step) * step;
+}
+
+VertexPositionInputs _GetVertexPositionInputs(float3 positionOS)
+{
+    VertexPositionInputs input;
+    input.positionWS = TransformObjectToWorld(positionOS);
+    
+    #if defined(_STABILIZATION_SNAP_WORLD_POS)
+    input.positionWS = SnapWorldPositionToPixelGrid(input.positionWS);
+    #endif
+    
+    input.positionVS = TransformWorldToView(input.positionWS);
+    input.positionCS = TransformWorldToHClip(input.positionWS);
+    
+    float4 ndc = input.positionCS * 0.5f;
+    input.positionNDC.xy = float2(ndc.x, ndc.y * _ProjectionParams.x) + ndc.w;
+    input.positionNDC.zw = input.positionCS.zw;
+    
+    //#if defined(_PIXEL_STABILIZATION_ORTHOGRAPHIC)
+    //float2 pixelSize;
+    //pixelSize.x = 2.0 / 1920;
+    //pixelSize.y = 2.0 / 1080;
+    //input.positionCS.xy = floor(input.positionCS.xy / pixelSize) * pixelSize;
+    //#endif
+    
+    return input;
+}
 
 float2 AtlasUV(float2 uv)
 {

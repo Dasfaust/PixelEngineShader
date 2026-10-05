@@ -22,7 +22,7 @@ Shader "PixelEngineLit"
         [NoScaleOffset] _EmissionMap("Emission Map", 2D) = "white" { }
         [HDR] _EmissionColor("Emission Base Color", color) = (1, 1, 1, 1)
         _EmissionStrength("Emission Strength", Range(0, 1)) = 0
-
+        
         [Header(Atlas Options)]
         _SizeRange("Size and Index Range", vector) = (1, 1, 0, 0)
         _TilingOffset("Tiling and Offset", vector) = (1, 1, 0, 0)
@@ -55,6 +55,10 @@ Shader "PixelEngineLit"
         _InnerOutlineThreshold("Inner Outline Threshold", float) = 0.15
         _InnerOutlineBias("Inner Outline Bias", vector) = (1, 1, 1, 0)
 
+        [Header(Pixel Stabilization)]
+        _PixelsPerUnit("Pixels Per Unit", float) = 64
+        [Toggle(_STABILIZATION_SNAP_WORLD_POS)] _StabilizationSnapWorldPos("Snap World Position", float) = 0
+        
         [Header(Rendering Options)]
         _Cutoff("Alpha Clip Threshold", Range(0, 1)) = 0.5
         [HideInInspector] _SurfaceType("Surface Type", Integer) = 0
@@ -97,6 +101,7 @@ Shader "PixelEngineLit"
                 #pragma multi_compile _ DOTS_INSTANCING_ON
 
                 #pragma shader_feature_local_vertex _ _BILLBOARDING_CYLINDRICAL
+                #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
                 #pragma shader_feature_local_fragment _ _ALPHA_CUTOUT
                 #pragma shader_feature_local_fragment _ _DOUBLE_SIDED_NORMALS
                 #pragma shader_feature_local_fragment _HEIGHT_MODE_PARALLAX _HEIGHT_MODE_TESSELLATION
@@ -113,6 +118,7 @@ Shader "PixelEngineLit"
                 #pragma shader_feature_local_fragment _ _OUTLINES_LIGHTING_UNLIT _OUTLINES_LIGHTING_EMISSIVE
                 #pragma shader_feature_local_fragment _ _DEBUG_DEPTH _DEBUG_NORMALS _DEBUG_OUTLINES
                 #pragma shader_feature_local_fragment _ _TEXTURE_SAMPLING_TYPE_UPSCALED
+                #pragma shader_feature_local_fragment _ _COLOR_SPACE_CEILAB
 
                 // com.unity.render-pipelines.universal/Shaders/Lit.shader#L136
                 #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
@@ -161,6 +167,7 @@ Shader "PixelEngineLit"
                 #pragma multi_compile _ DOTS_INSTANCING_ON
 
                 #pragma shader_feature_local_vertex _BILLBOARDING_CYLINDRICAL
+                #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
                 #pragma shader_feature_local_fragment _ALPHA_CUTOUT
                 #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS
                 #pragma shader_feature_local_fragment _HEIGHT_MODE_PARALLAX
@@ -192,6 +199,7 @@ Shader "PixelEngineLit"
                 #pragma multi_compile _ DOTS_INSTANCING_ON
 
                 #pragma shader_feature_local_vertex _BILLBOARDING_CYLINDRICAL
+                #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
                 #pragma shader_feature_local_fragment _ALPHA_CUTOUT
                 #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS
                 #pragma shader_feature_local_fragment _HEIGHT_MODE_PARALLAX
@@ -206,5 +214,5 @@ Shader "PixelEngineLit"
         }
     }
 
-    CustomEditor "PixelEngine.PixelEngineShaderInspector"
+    CustomEditor "PixelEngine.Editor.PixelEngineShaderInspector"
 }
