@@ -1,1 +1,4 @@
-*.meta
+# Track every .meta. Unity writes one per asset, and the GUID inside it is the
+# only link a material in the host project has to these shaders. Ignore a .meta
+# and each clone invents a new GUID, so every material that uses PixelEngineLit
+# loses its shader on a fresh clone.
