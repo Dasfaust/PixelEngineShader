@@ -233,9 +233,18 @@ LightingResult CalculateLighting(ToonLightingInput data)
     InitBRDFData(data, brdfData);
     result.mixedColor = GlobalIllumination(brdfData, inputData.bakedGI, aoFactor.indirectAmbientOcclusion, inputData.positionWS, inputData.normalWS, inputData.viewDirectionWS, inputData.normalizedScreenSpaceUV);
 
+    // com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl#L327
+    // URP declares the mesh rendering layer once per function. It must not live inside the
+    // _ADDITIONAL_LIGHTS block below: the main-light path at the end of this function uses it
+    // under _LIGHT_LAYERS alone, so a variant with _LIGHT_LAYERS and no _ADDITIONAL_LIGHTS has
+    // no declaration in scope and fails to compile. The Editor never compiles that combination,
+    // so only a player build shows it.
+    #if defined(_LIGHT_LAYERS)
+        uint meshRenderingLayers = GetMeshRenderingLayer();
+    #endif
+
     // Forward+ additional lights loop
     #if defined(_ADDITIONAL_LIGHTS)
-        uint meshRenderingLayers = GetMeshRenderingLayer();
         uint pixelLightCount = GetAdditionalLightsCount();
 
         // com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl#L296
