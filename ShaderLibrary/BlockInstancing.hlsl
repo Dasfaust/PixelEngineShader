@@ -1,7 +1,7 @@
 #ifndef PIXELENGINE_BLOCK_INSTANCING_INCLUDED
 #define PIXELENGINE_BLOCK_INSTANCING_INCLUDED
 
-// Per-instance block data for drawing the block arrays with DrawMeshInstancedIndirect.
+// Per-instance block data for the indirect block draw.
 //
 // The buffer is two float4 elements per instance: element 2i is the cell center (xyz, w unused),
 // element 2i + 1 is the instance color (rgba). The C# side writes the pairs and binds the buffer
@@ -12,18 +12,54 @@
 
 #if defined(_BLOCK_INSTANCED)
 
+// The args buffer is read by the GPU and never by the shader.
+//
+// The instance count lives in the args buffer the submission carries, and the draw runs that count.
+// The shader's only job is to index the instance pairs with the draw's own SV_InstanceID.
+//
+// UnityIndirect.cginc is not part of that contract on this pipeline. That file sits in
+// Editor/Data/Resources/CGIncludes, beside UnityInstancing.cginc, which is the built-in pipeline's CG
+// include set. No file in com.unity.render-pipelines.core or
+// com.unity.render-pipelines.universal names it, its InitIndirectDrawArgs helper, or its
+// GetIndirectInstanceID helper, and URP never binds the unity_IndirectDrawArgs buffer those helpers
+// read. An unbound buffer read returns zeros, so the helper returns the index unchanged and the shader
+// is correct by accident and not by contract. The built-in pipeline is obsolete from Unity 7.0, so a
+// dependency on that file is a dependency that ends.
+//
+// This is the shape the A3c1 screen check recorded as "one slab": the counters said drawn=9 and the
+// screen showed one cube. The counters were the half that was true, and the cause was Unity's
+// instancing machinery, recorded below and in Docs/phase3-block-rendering.md.
+
 StructuredBuffer<float4> _BlockInstances;
 
-// The indirect draw indexes instances through unity_InstanceID, and that identifier is declared only
-// in the instancing variants of a pass. The plain variant of multi_compile_instancing — the one a
-// device without GPU instancing compiles — has no unity_InstanceID, and naming it there fails the
-// build. The macro keeps the instanced path honest where it exists and lands every vertex on
-// instance 0 where it does not, so the keyword never breaks a build on any device. Desktop devices
-// take the instancing variant.
-#if defined(UNITY_INSTANCING_ENABLED)
-    #define BLOCK_INSTANCE_ID unity_InstanceID
+// The instance index the draw call numbers, and the attribute that carries it.
+//
+// The index comes from the draw, and the two paths name it through different fields.
+//
+// Under Unity's instancing macros, INSTANCING_ON and DOTS_INSTANCING_ON alike, the field is
+// `instanceID`, declared by UNITY_VERTEX_INPUT_INSTANCE_ID and set by UNITY_SETUP_INSTANCE_ID. Unity
+// owns the per-instance property data on those paths, and a draw runs as many instances as that data
+// holds. A RenderParams submission from a MonoBehaviour has one renderer, so that data is one instance
+// deep and the args buffer's count is ignored. That is the shape the A3c1 "one slab" record saw: the
+// counters said drawn=9 and the screen showed one cube.
+//
+// In the plain variant that field does not exist, so the pass structs declare SV_InstanceID themselves.
+// That is the variant this draw takes today, because the material is SRP-batcher compatible and URP
+// submits it through the SRP Batcher, where the args buffer's count is the instance count.
+//
+// The rule that keeps the draw honest is the property block and not the material's instancing flag. A
+// member of UnityPerMaterial that names no declared property makes the material SRP-batcher
+// incompatible, and an incompatible material with GPU instancing enabled lands on the legacy
+// GPU-instancing path, where a RenderParams submission runs one instance at the renderer's culling
+// transform, the draw bounds' center. Measured: with the property block fixed, the block material drew
+// all 48 instances with m_EnableInstancingVariants set to 1 and with it set to 0. The flag is inert on
+// an SRP-batched material.
+#if UNITY_ANY_INSTANCING_ENABLED
+    #define BLOCK_INSTANCE_ID(input) (input).instanceID
+    #define BLOCK_INSTANCE_ID_ATTRIBUTE()
 #else
-    #define BLOCK_INSTANCE_ID 0u
+    #define BLOCK_INSTANCE_ID(input) (input).blockInstanceID
+    #define BLOCK_INSTANCE_ID_ATTRIBUTE() uint blockInstanceID : SV_InstanceID;
 #endif
 
 float4 GetBlockInstancePosition(uint instanceID)
@@ -36,13 +72,24 @@ float4 GetBlockInstanceColor(uint instanceID)
     return _BlockInstances[instanceID * 2 + 1];
 }
 
-// The block mesh is a unit cube centered at the origin, and the drawing material's transform is
-// the identity at the world origin. Adding the cell center in object space lands the cube on the
-// cell, and every pass that calls this gets the same placement.
-float3 ApplyBlockInstance(float3 positionOS, uint instanceID)
+// The block's world position.
+//
+// The RenderMesh* submission family carries no object transform — `RenderParams` has no matrix field
+// on Unity 6.6 — so unity_ObjectToWorld on this draw is Unity's own value for the submission, and the
+// play-mode screen check measured it as the draw bounds' center. Every block the draw placed landed
+// on its own cell plus that center, in x and in z, and nothing logged it.
+//
+// So the placement never touches the object-to-world matrices. The instance pair IS the world cell
+// center, the mesh is a unit cube centered at the origin, and the view matrices do the rest.
+float3 GetBlockPositionWS(float3 positionOS, uint instanceID)
 {
     return positionOS + GetBlockInstancePosition(instanceID).xyz;
 }
 
+#endif
+
+// The keyword is off: the attribute the pass structs declare is empty, and no instance index exists.
+#ifndef BLOCK_INSTANCE_ID_ATTRIBUTE
+    #define BLOCK_INSTANCE_ID_ATTRIBUTE()
 #endif
 #endif

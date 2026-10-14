@@ -15,6 +15,7 @@ struct Attributes
     float2 uv1 : TEXCOORD1;
 
     UNITY_VERTEX_INPUT_INSTANCE_ID
+    BLOCK_INSTANCE_ID_ATTRIBUTE()
 };
 
 struct Interpolators
@@ -40,12 +41,19 @@ Interpolators Vertex(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
     #if defined(_BLOCK_INSTANCED)
-        input.positionOS = ApplyBlockInstance(input.positionOS, BLOCK_INSTANCE_ID);
-        output.blockColor = GetBlockInstanceColor(BLOCK_INSTANCE_ID);
+        uint blockInstanceID = BLOCK_INSTANCE_ID(input);
+        output.blockColor = GetBlockInstanceColor(blockInstanceID);
     #endif
 
     VertexPositionInputs positionInputs = _GetVertexPositionInputs(input.positionOS);
-    
+
+    #if defined(_BLOCK_INSTANCED)
+        // The instance pair is the world cell center, so the world position is built from it and the
+        // object-to-world matrices stay out of the placement.
+        positionInputs.positionWS = GetBlockPositionWS(input.positionOS, blockInstanceID);
+        positionInputs.positionCS = TransformWorldToHClip(positionInputs.positionWS);
+    #endif
+
     output.positionCS = positionInputs.positionCS;
     output.positionWS = positionInputs.positionWS;
 

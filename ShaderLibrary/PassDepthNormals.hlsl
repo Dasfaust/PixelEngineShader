@@ -18,6 +18,7 @@ struct Attributes
     float2 uv : TEXCOORD0;
 
     UNITY_VERTEX_INPUT_INSTANCE_ID
+    BLOCK_INSTANCE_ID_ATTRIBUTE()
 };
 
 struct Interpolators
@@ -40,10 +41,18 @@ Interpolators Vertex(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
     #if defined(_BLOCK_INSTANCED)
-        input.positionOS = ApplyBlockInstance(input.positionOS, BLOCK_INSTANCE_ID);
+        uint blockInstanceID = BLOCK_INSTANCE_ID(input);
     #endif
 
     VertexPositionInputs positionInputs = _GetVertexPositionInputs(input.positionOS);
+
+    #if defined(_BLOCK_INSTANCED)
+        // Same placement rule as the forward pass: the instance pair is the world cell center, and the
+        // object-to-world matrices stay out of it. The depth-normal texture and the screen must agree.
+        positionInputs.positionWS = GetBlockPositionWS(input.positionOS, blockInstanceID);
+        positionInputs.positionCS = TransformWorldToHClip(positionInputs.positionWS);
+    #endif
+
     output.positionCS = positionInputs.positionCS;
     output.positionWS = positionInputs.positionWS;
 

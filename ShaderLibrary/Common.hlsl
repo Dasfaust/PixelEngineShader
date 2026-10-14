@@ -18,9 +18,20 @@ SAMPLER(sampler_MaskMap);
 TEXTURE2D(_RampMap);
 SAMPLER(sampler_RampMap);
 
+// The material property block the SRP lays out per material.
+//
+// Every member here must name a property the shader's Properties block declares. Unity validates the
+// layout against the material's property set, and a member with no matching property raises
+// "Property offset falls outside of range for type in GetPropertyData" and "Expected instancing
+// keynames to match" out of the render loop. When that validation fails, Unity never builds the
+// per-instance property buffer, and an instanced draw is submitted with one instance and per-draw
+// data nobody wrote. Nothing in the material, the scene, or the draw call says so.
+//
+// _MainTex_ST and _MainTex_TexelSize sat here for a shader that has no _MainTex: this shader's main
+// texture is _DiffuseMap, marked [NoScaleOffset], and the viewport shader declares its own block
+// beside its own _MainTex property. _ShadowMapTexture_TexelSize is a built-in-pipeline uniform, not
+// a material property, so it belongs outside the block.
 CBUFFER_START(UnityPerMaterial)
-    float4 _MainTex_ST;
-    float4 _MainTex_TexelSize;
     float4 _DiffuseMap_TexelSize;
     float4 _NormalMap_TexelSize;
     float4 _EmissionMap_TexelSize;
@@ -54,9 +65,15 @@ CBUFFER_START(UnityPerMaterial)
     float4 _InnerOutlineColor;
     float _InnerOutlineThreshold;
     float4 _InnerOutlineBias;
-    float4 _ShadowMapTexture_TexelSize;
     float _PixelsPerUnit;
 CBUFFER_END
+
+// The built-in pipeline's shadow-map texel size, read by the shadow caster's pixel-stabilization
+// outline. It is a pipeline uniform and not a material property, so it stays outside the material
+// block. URP never writes this name — its shadow map size rides on the main-light shadow params —
+// so the shadow-pass outline math reads zero here. That is a separate fault, recorded with the
+// block instancing work and not fixed by it.
+float4 _ShadowMapTexture_TexelSize;
 
 #ifdef UNITY_DOTS_INSTANCING_ENABLED
     UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)

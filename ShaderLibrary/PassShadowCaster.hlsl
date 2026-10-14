@@ -56,6 +56,7 @@ struct Attributes
     float2 uv : TEXCOORD0;
 
     UNITY_VERTEX_INPUT_INSTANCE_ID
+    BLOCK_INSTANCE_ID_ATTRIBUTE()
 };
 
 struct Interpolators
@@ -74,10 +75,17 @@ Interpolators Vertex(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
     #if defined(_BLOCK_INSTANCED)
-        input.positionOS = ApplyBlockInstance(input.positionOS, BLOCK_INSTANCE_ID);
+        uint blockInstanceID = BLOCK_INSTANCE_ID(input);
     #endif
 
     VertexPositionInputs positionInputs = _GetVertexPositionInputs(input.positionOS);
+
+    #if defined(_BLOCK_INSTANCED)
+        // Same placement rule as the forward pass, so the shadow lands under the block and not at the
+        // draw bounds' center.
+        positionInputs.positionWS = GetBlockPositionWS(input.positionOS, blockInstanceID);
+        positionInputs.positionCS = TransformWorldToHClip(positionInputs.positionWS);
+    #endif
     
     #if defined(_PIXEL_STABILIZATION_ORTHOGRAPHIC)
     positionInputs.positionCS = PixelStabilizationShadowClip(positionInputs.positionCS);
