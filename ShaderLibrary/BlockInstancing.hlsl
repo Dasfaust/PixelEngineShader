@@ -34,24 +34,28 @@ StructuredBuffer<float4> _BlockInstances;
 
 // The instance index the draw call numbers, and the attribute that carries it.
 //
-// The block draw takes the plain variant, and that is a rule and not a preference. Unity services an
-// instanced draw from the per-instance property data Unity owns. A RenderParams submission from a
-// MonoBehaviour has exactly one renderer, so that data is one instance deep: the args buffer's instance
-// count is ignored, every vertex reads index 0, and unity_ObjectToWorld carries the renderer's culling
-// transform, which is the draw bounds' center. The one cube that draws lands on instance 0's cell plus
-// that center, and the machinery logs nothing. BlockRenderer logs a material that carries the flag on,
-// and clears it.
+// The index comes from the draw, and the two paths name it through different fields.
 //
-// UNITY_INSTANCING_ENABLED is defined only for the INSTANCING_ON variant. URP compiles an SRP-batched
-// material with DOTS_INSTANCING_ON as well, and that path defines UNITY_DOTS_INSTANCING_ENABLED and not
-// UNITY_INSTANCING_ENABLED. UNITY_ANY_INSTANCING_ENABLED is the switch that declares
-// UNITY_VERTEX_INPUT_INSTANCE_ID, so it names both paths.
+// Under Unity's instancing macros, INSTANCING_ON and DOTS_INSTANCING_ON alike, the field is
+// `instanceID`, declared by UNITY_VERTEX_INPUT_INSTANCE_ID and set by UNITY_SETUP_INSTANCE_ID. Unity
+// owns the per-instance property data on those paths, and a draw runs as many instances as that data
+// holds. A RenderParams submission from a MonoBehaviour has one renderer, so that data is one instance
+// deep and the args buffer's count is ignored. That is the shape the A3c1 "one slab" record saw: the
+// counters said drawn=9 and the screen showed one cube.
 //
-// The instancing branch pins the index to 0 and declares no attribute, so the variant still builds. A
-// material that asks for instancing and this keyword together draws one cube, which is exactly what the
-// machinery does, and the renderer's log names that material.
+// In the plain variant that field does not exist, so the pass structs declare SV_InstanceID themselves.
+// That is the variant this draw takes today, because the material is SRP-batcher compatible and URP
+// submits it through the SRP Batcher, where the args buffer's count is the instance count.
+//
+// The rule that keeps the draw honest is the property block and not the material's instancing flag. A
+// member of UnityPerMaterial that names no declared property makes the material SRP-batcher
+// incompatible, and an incompatible material with GPU instancing enabled lands on the legacy
+// GPU-instancing path, where a RenderParams submission runs one instance at the renderer's culling
+// transform, the draw bounds' center. Measured: with the property block fixed, the block material drew
+// all 48 instances with m_EnableInstancingVariants set to 1 and with it set to 0. The flag is inert on
+// an SRP-batched material.
 #if UNITY_ANY_INSTANCING_ENABLED
-    #define BLOCK_INSTANCE_ID(input) 0u
+    #define BLOCK_INSTANCE_ID(input) (input).instanceID
     #define BLOCK_INSTANCE_ID_ATTRIBUTE()
 #else
     #define BLOCK_INSTANCE_ID(input) (input).blockInstanceID
