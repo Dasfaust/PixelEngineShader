@@ -42,7 +42,7 @@ Shader "PixelEngineLit"
         _SpotQuantization("Spot Light Quantization", float) = 6
 
         [Header(Outline Options)]
-        [Toggle(_OUTLINES_ENABLED)] _EnableOutlines("Enable Outlines", float) = 0
+        [Toggle(_OUTLINES_ENABLED)] _EnableOutlines("Enable Outlines", float) = 1
         [KeywordEnum(Orthographic, Perspective)] _Outlines("Outline Mode", float) = 0
         _PerspectiveOutlineMaxDistance("Perspective Outline Max Distance", float) = 50
         [KeywordEnum(SoftLight, Overlay, Overwrite)] _Outlines_Blending("Outlines Blending Mode", float) = 0
