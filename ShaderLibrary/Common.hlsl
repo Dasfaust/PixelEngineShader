@@ -29,8 +29,10 @@ SAMPLER(sampler_RampMap);
 //
 // _MainTex_ST and _MainTex_TexelSize sat here for a shader that has no _MainTex: this shader's main
 // texture is _DiffuseMap, marked [NoScaleOffset], and the viewport shader declares its own block
-// beside its own _MainTex property. _ShadowMapTexture_TexelSize is a built-in-pipeline uniform, not
-// a material property, so it belongs outside the block.
+// beside its own _MainTex property. _ShadowMapTexture_TexelSize sat here too. It is a built-in
+// pipeline uniform. The shadow-caster code that read it sits behind one keyword, and no pragma
+// declares that keyword, so the code compiled out of every variant and the read never ran. The
+// uniform and the dead code are gone.
 CBUFFER_START(UnityPerMaterial)
     float4 _DiffuseMap_TexelSize;
     float4 _NormalMap_TexelSize;
@@ -68,12 +70,6 @@ CBUFFER_START(UnityPerMaterial)
     float _PixelsPerUnit;
 CBUFFER_END
 
-// The built-in pipeline's shadow-map texel size, read by the shadow caster's pixel-stabilization
-// outline. It is a pipeline uniform and not a material property, so it stays outside the material
-// block. URP never writes this name — its shadow map size rides on the main-light shadow params —
-// so the shadow-pass outline math reads zero here. That is a separate fault, recorded with the
-// block instancing work and not fixed by it.
-float4 _ShadowMapTexture_TexelSize;
 
 #ifdef UNITY_DOTS_INSTANCING_ENABLED
     UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
@@ -149,11 +145,6 @@ float3 SnapWorldPositionToPixelGrid(float3 worldPos)
     return worldPos - right * (projX - snappedX) - up * (projY - snappedY);
 }
 
-float QuantizeDepth(float depth)
-{
-    float step = 1.0 / 65536.0;
-    return round(depth / step) * step;
-}
 
 VertexPositionInputs _GetVertexPositionInputs(float3 positionOS)
 {
@@ -171,13 +162,7 @@ VertexPositionInputs _GetVertexPositionInputs(float3 positionOS)
     input.positionNDC.xy = float2(ndc.x, ndc.y * _ProjectionParams.x) + ndc.w;
     input.positionNDC.zw = input.positionCS.zw;
     
-    //#if defined(_PIXEL_STABILIZATION_ORTHOGRAPHIC)
-    //float2 pixelSize;
-    //pixelSize.x = 2.0 / 1920;
-    //pixelSize.y = 2.0 / 1080;
-    //input.positionCS.xy = floor(input.positionCS.xy / pixelSize) * pixelSize;
-    //#endif
-    
+
     return input;
 }
 
