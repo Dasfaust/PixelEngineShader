@@ -41,7 +41,6 @@ Interpolators Vertex(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
     #if defined(_BLOCK_INSTANCED)
-        BLOCK_INIT_INDIRECT_DRAW();
         uint blockInstanceID = BLOCK_INSTANCE_ID(input);
     #endif
 

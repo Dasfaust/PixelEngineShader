@@ -12,70 +12,49 @@
 
 #if defined(_BLOCK_INSTANCED)
 
-// The indirect draw contract Unity's RenderMeshIndirect call requires.
+// The args buffer is read by the GPU and never by the shader.
 //
-// Unity reads the instance count and the start instance from the args buffer on the GPU, and it
-// binds that buffer under the name UnityIndirect.cginc declares. A shader that never declares it
-// never gets the buffer, and the submission degrades: the draw runs as one instance, every vertex
-// sees SV_InstanceID 0, and the per-draw data the batch fills for a normal draw is what the vertex
-// reads. Nothing logs it. A 6-block world then draws as one cube stacked on one cell, and the
-// instance count the CPU wrote into the args buffer is a number no reader on the screen can see.
+// The instance count lives in the args buffer the submission carries, and the draw runs that count.
+// The shader's only job is to index the instance pairs with the draw's own SV_InstanceID.
+//
+// UnityIndirect.cginc is not part of that contract on this pipeline. That file sits in
+// Editor/Data/Resources/CGIncludes, beside UnityInstancing.cginc, which is the built-in pipeline's CG
+// include set. No file in com.unity.render-pipelines.core or
+// com.unity.render-pipelines.universal names it, its InitIndirectDrawArgs helper, or its
+// GetIndirectInstanceID helper, and URP never binds the unity_IndirectDrawArgs buffer those helpers
+// read. An unbound buffer read returns zeros, so the helper returns the index unchanged and the shader
+// is correct by accident and not by contract. The built-in pipeline is obsolete from Unity 7.0, so a
+// dependency on that file is a dependency that ends.
 //
 // This is the shape the A3c1 screen check recorded as "one slab": the counters said drawn=9 and the
-// screen showed one cube, and the counters were the half that was true.
-//
-// InitIndirectDrawArgs must run at the top of the vertex stage that uses the index, so the args
-// are loaded before GetIndirectInstanceID reads them.
-#define UNITY_INDIRECT_DRAW_ARGS IndirectDrawIndexedArgs
-#include "UnityIndirect.cginc"
-
-#define BLOCK_INIT_INDIRECT_DRAW() InitIndirectDrawArgs(0)
+// screen showed one cube. The counters were the half that was true, and the cause was Unity's
+// instancing machinery, recorded below and in Docs/phase3-block-rendering.md.
 
 StructuredBuffer<float4> _BlockInstances;
 
-// The instance index the draw call numbers, read the way the indirect path states it.
+// The instance index the draw call numbers, and the attribute that carries it.
 //
-// Two traps sit on this one line, and each one lands every vertex on instance 0.
+// The block draw takes the plain variant, and that is a rule and not a preference. Unity services an
+// instanced draw from the per-instance property data Unity owns. A RenderParams submission from a
+// MonoBehaviour has exactly one renderer, so that data is one instance deep: the args buffer's instance
+// count is ignored, every vertex reads index 0, and unity_ObjectToWorld carries the renderer's culling
+// transform, which is the draw bounds' center. The one cube that draws lands on instance 0's cell plus
+// that center, and the machinery logs nothing. BlockRenderer logs a material that carries the flag on,
+// and clears it.
 //
-// UNITY_INSTANCING_ENABLED is defined only for the INSTANCING_ON variant. URP compiles an
-// instanced material with DOTS_INSTANCING_ON as well, and that path defines
-// UNITY_DOTS_INSTANCING_ENABLED and not UNITY_INSTANCING_ENABLED. A macro that tests the one name
-// takes the fallback branch on the path the pipeline draws with. UNITY_ANY_INSTANCING_ENABLED is
-// the switch that declares UNITY_VERTEX_INPUT_INSTANCE_ID, so it is true exactly when the field the
-// macro reads exists.
+// UNITY_INSTANCING_ENABLED is defined only for the INSTANCING_ON variant. URP compiles an SRP-batched
+// material with DOTS_INSTANCING_ON as well, and that path defines UNITY_DOTS_INSTANCING_ENABLED and not
+// UNITY_INSTANCING_ENABLED. UNITY_ANY_INSTANCING_ENABLED is the switch that declares
+// UNITY_VERTEX_INPUT_INSTANCE_ID, so it names both paths.
 //
-// SV_InstanceID is the draw's own numbering, and on Vulkan it starts at the args buffer's
-// startInstance. GetIndirectInstanceID is the portable form of that subtraction, and it is the
-// reason the index goes through the args and not straight through the semantic.
-//
-// The plain variant of multi_compile_instancing — the one a device without GPU instancing compiles
-// — has neither the semantic nor the args buffer, so the fallback keeps that variant building.
-// Desktop devices take an instancing variant.
+// The instancing branch pins the index to 0 and declares no attribute, so the variant still builds. A
+// material that asks for instancing and this keyword together draws one cube, which is exactly what the
+// machinery does, and the renderer's log names that material.
 #if UNITY_ANY_INSTANCING_ENABLED
-    #define BLOCK_INSTANCE_ID(input) GetIndirectInstanceID((input).instanceID)
-#else
-    // The plain variant: the draw's own SV_InstanceID, read straight off the vertex.
-    //
-    // This is the branch the block draw takes, and it is the whole point of the keyword's contract.
-    // Unity's GPU-instancing machinery services a draw from the per-instance property data Unity
-    // itself owns. A RenderParams submission from a MonoBehaviour has exactly one renderer, so that
-    // data is one instance deep: the args buffer's instance count is overridden, every vertex sees
-    // index 0, and unity_ObjectToWorld carries the renderer's culling transform — the draw bounds'
-    // center — so the one cube that draws lands on instance 0's cell plus the bounds center. Nothing
-    // logs any of it.
-    //
-    // Out of the machinery, the submission is a raw indexed-indirect draw: the args buffer's count is
-    // the instance count, unity_ObjectToWorld is the submission's own matrix, and the per-instance
-    // data is the buffer this header declares.
-    #define BLOCK_INSTANCE_ID(input) (input).blockInstanceID
-#endif
-
-// The vertex attribute carrying the draw's instance index in the plain variant. Under Unity's
-// instancing macros the field already exists as `instanceID`, so the macro is empty there and the
-// Attributes structs stay as they are.
-#if UNITY_ANY_INSTANCING_ENABLED
+    #define BLOCK_INSTANCE_ID(input) 0u
     #define BLOCK_INSTANCE_ID_ATTRIBUTE()
 #else
+    #define BLOCK_INSTANCE_ID(input) (input).blockInstanceID
     #define BLOCK_INSTANCE_ID_ATTRIBUTE() uint blockInstanceID : SV_InstanceID;
 #endif
 
