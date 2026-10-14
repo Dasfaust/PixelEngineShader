@@ -102,7 +102,7 @@ Shader "PixelEngineLit"
 
                 #pragma shader_feature_local_vertex _ _BILLBOARDING_CYLINDRICAL
                 #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
-                #pragma shader_feature_local_vertex _ _BLOCK_INSTANCED
+                #pragma shader_feature_local _ _BLOCK_INSTANCED
                 #pragma shader_feature_local_fragment _ _ALPHA_CUTOUT
                 #pragma shader_feature_local_fragment _ _DOUBLE_SIDED_NORMALS
                 #pragma shader_feature_local_fragment _HEIGHT_MODE_PARALLAX _HEIGHT_MODE_TESSELLATION
@@ -169,7 +169,7 @@ Shader "PixelEngineLit"
 
                 #pragma shader_feature_local_vertex _BILLBOARDING_CYLINDRICAL
                 #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
-                #pragma shader_feature_local_vertex _ _BLOCK_INSTANCED
+                #pragma shader_feature_local _ _BLOCK_INSTANCED
                 #pragma shader_feature_local_fragment _ALPHA_CUTOUT
                 #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS
                 #pragma shader_feature_local_fragment _HEIGHT_MODE_PARALLAX
@@ -202,7 +202,7 @@ Shader "PixelEngineLit"
 
                 #pragma shader_feature_local_vertex _BILLBOARDING_CYLINDRICAL
                 #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
-                #pragma shader_feature_local_vertex _ _BLOCK_INSTANCED
+                #pragma shader_feature_local _ _BLOCK_INSTANCED
                 #pragma shader_feature_local_fragment _ALPHA_CUTOUT
                 #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS
                 #pragma shader_feature_local_fragment _HEIGHT_MODE_PARALLAX
