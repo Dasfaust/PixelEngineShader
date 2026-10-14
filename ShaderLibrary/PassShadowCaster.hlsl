@@ -2,6 +2,7 @@
 #define TOON_SHADOW_CASTER_PASS_INCLUDED
 
 #include "ShaderLibrary/Common.hlsl"
+#include "ShaderLibrary/BlockInstancing.hlsl"
 
 // com.unity.render-pipelines.universal/Shaders/ShadowCasterPass.hlsl
 
@@ -71,6 +72,10 @@ Interpolators Vertex(Attributes input)
 
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
+
+    #if defined(_BLOCK_INSTANCED)
+        input.positionOS = ApplyBlockInstance(input.positionOS, unity_InstanceID);
+    #endif
 
     VertexPositionInputs positionInputs = _GetVertexPositionInputs(input.positionOS);
     

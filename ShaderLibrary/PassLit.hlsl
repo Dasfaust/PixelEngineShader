@@ -4,6 +4,7 @@
 #include "ShaderLibrary/Common.hlsl"
 #include "ShaderLibrary/Lighting.hlsl"
 #include "ShaderLibrary/Outlines.hlsl"
+#include "ShaderLibrary/BlockInstancing.hlsl"
 
 struct Attributes
 {
@@ -24,6 +25,9 @@ struct Interpolators
     float4 tangentWS : TEXCOORD4;
     float2 uv : TEXCOORD0;
     float2 uv1 : TEXCOORD1;
+    #if defined(_BLOCK_INSTANCED)
+        float4 blockColor : TEXCOORD5;
+    #endif
 
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
@@ -34,6 +38,11 @@ Interpolators Vertex(Attributes input)
 
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
+
+    #if defined(_BLOCK_INSTANCED)
+        input.positionOS = ApplyBlockInstance(input.positionOS, unity_InstanceID);
+        output.blockColor = GetBlockInstanceColor(unity_InstanceID);
+    #endif
 
     VertexPositionInputs positionInputs = _GetVertexPositionInputs(input.positionOS);
     
@@ -85,6 +94,13 @@ float4 Fragment(Interpolators input
 
     float4 diffuseColor = SampleDiffuseColor(uv);
     TestAlphaClip(diffuseColor);
+
+    #if defined(_BLOCK_INSTANCED)
+        // The instance color multiplies the sampled diffuse, so the block's look stays the material's
+        // — palette quantization, masks, and lighting all apply unchanged — and the per-instance data
+        // only tints.
+        diffuseColor.rgb *= input.blockColor.rgb;
+    #endif
 
     lightingInput.screenUV = GetNormalizedScreenSpaceUV(input.positionCS);
     #if defined(_DEBUG_DEPTH)
