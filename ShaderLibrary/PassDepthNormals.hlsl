@@ -40,7 +40,7 @@ Interpolators Vertex(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
     #if defined(_BLOCK_INSTANCED)
-        input.positionOS = ApplyBlockInstance(input.positionOS, unity_InstanceID);
+        input.positionOS = ApplyBlockInstance(input.positionOS, BLOCK_INSTANCE_ID);
     #endif
 
     VertexPositionInputs positionInputs = _GetVertexPositionInputs(input.positionOS);

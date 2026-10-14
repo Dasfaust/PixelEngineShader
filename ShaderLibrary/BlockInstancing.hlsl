@@ -14,6 +14,18 @@
 
 StructuredBuffer<float4> _BlockInstances;
 
+// The indirect draw indexes instances through unity_InstanceID, and that identifier is declared only
+// in the instancing variants of a pass. The plain variant of multi_compile_instancing — the one a
+// device without GPU instancing compiles — has no unity_InstanceID, and naming it there fails the
+// build. The macro keeps the instanced path honest where it exists and lands every vertex on
+// instance 0 where it does not, so the keyword never breaks a build on any device. Desktop devices
+// take the instancing variant.
+#if defined(UNITY_INSTANCING_ENABLED)
+    #define BLOCK_INSTANCE_ID unity_InstanceID
+#else
+    #define BLOCK_INSTANCE_ID 0u
+#endif
+
 float4 GetBlockInstancePosition(uint instanceID)
 {
     return _BlockInstances[instanceID * 2];
