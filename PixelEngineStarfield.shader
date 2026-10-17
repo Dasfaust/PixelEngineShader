@@ -14,24 +14,46 @@ Shader "Custom/PixelEngineStarfield"
         _ScreenPxPerUnit("Screen Pixels Per World Unit", float) = 64
     }
 
+    // The pass skeleton mirrors "Universal Render Pipeline/Unlit" from this pipeline version:
+    // its SubShader tags, state placement, LOD line, and keyword pragma set. The star field
+    // quad drew full-screen with Unlit in the same slot, and drew nothing with a hand-written
+    // URP pass in every probe (constant output, fresh material, queue override, command-buffer
+    // DrawRenderer), so the difference lives in this skeleton, not in the pattern code.
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" "Queue" = "Background" }
+        Tags
+        {
+            "RenderType" = "Opaque"
+            "IgnoreProjector" = "True"
+            "UniversalMaterialType" = "Unlit"
+            "RenderPipeline" = "UniversalPipeline"
+            "Queue" = "Background"
+        }
+        LOD 100
+
+        Blend One Zero
+        ZWrite On
+        Cull Off
 
         Pass
         {
             Name "Starfield"
             Tags { "LightMode" = "UniversalForward" }
 
-            Cull Off
-            ZWrite On
-            ZTest LEqual
-            Blend One Zero
-
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma target 3.5
+            #pragma target 2.0
+
+            #pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
+            #pragma multi_compile_fragment _ _DBUFFER_MRT1 _DBUFFER_MRT2 _DBUFFER_MRT3
+            #pragma multi_compile _ DEBUG_DISPLAY
+            #pragma multi_compile _ LOD_FADE_CROSSFADE
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/RenderingLayers.hlsl"
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Fog.hlsl"
+
+            #pragma multi_compile_instancing
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -129,6 +151,68 @@ Shader "Custom/PixelEngineStarfield"
                 }
 
                 return half4(col, 1.0);
+            }
+            ENDHLSL
+        }
+
+        // DepthNormals prepass pass. The project renderer runs forced depth priming
+        // (PC_Renderer m_DepthPrimingMode 1): the main pass draws with ZTest Equal
+        // against the prepass depth, and an object whose shader has no prepass pass
+        // never has that depth, so it is never drawn - silently, not pink. Every
+        // shader this renderer draws (URP Lit/Unlit, PixelEngineLit) carries the
+        // prepass passes; a forward-only shader is invisible to it. This pass mirrors
+        // the DepthNormals pass of PixelEngineLit: billboard normal out, rendering
+        // layers encoded for the D-Buffer decal feature.
+        Pass
+        {
+            Name "DepthNormals"
+            Tags { "LightMode" = "DepthNormals" }
+
+            HLSLPROGRAM
+            #pragma vertex dnVert
+            #pragma fragment dnFrag
+            #pragma target 2.0
+
+            #pragma multi_compile _ LOD_FADE_CROSSFADE
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/RenderingLayers.hlsl"
+
+            #pragma multi_compile_instancing
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            struct DNAttributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS   : NORMAL;
+            };
+
+            struct DNVaryings
+            {
+                float4 positionCS : SV_POSITION;
+                float3 normalWS   : TEXCOORD0;
+            };
+
+            DNVaryings dnVert(DNAttributes IN)
+            {
+                DNVaryings OUT;
+                OUT.positionCS = TransformObjectToHClip(IN.positionOS.xyz);
+                OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
+                return OUT;
+            }
+
+            void dnFrag(
+                DNVaryings IN
+                , out half4 outNormalWS : SV_Target0
+            #ifdef _WRITE_RENDERING_LAYERS
+                , out float4 outRenderingLayers : SV_Target1
+            #endif
+            )
+            {
+                outNormalWS = half4(NormalizeNormalPerPixel(IN.normalWS), 0.0);
+            #ifdef _WRITE_RENDERING_LAYERS
+                outRenderingLayers = float4(EncodeMeshRenderingLayer(), 0.0, 0.0, 0.0);
+            #endif
             }
             ENDHLSL
         }
