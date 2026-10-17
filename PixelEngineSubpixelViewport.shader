@@ -7,6 +7,7 @@ Shader "PixelEngineSubpixelViewport"
         [Header(Viewport Properties)]
         _ZoomLevel("Zoom Level", float) = 1
         _SubPixelOffset("Subpixel UV Offset", vector) = (0, 0, 0, 0)
+        _EdgeMargin("Edge Margin (texels)", float) = 2
 
         [Header(Color Options)]
         [NoScaleOffset] _Palette("Color Palette", 2D) = "white" { }
@@ -61,6 +62,7 @@ Shader "PixelEngineSubpixelViewport"
                 float4 _Palette_TexelSize;
                 float _ZoomLevel;
                 float4 _SubPixelOffset;
+                float _EdgeMargin;
                 float _Cutoff;
             CBUFFER_END
 
@@ -86,7 +88,17 @@ Shader "PixelEngineSubpixelViewport"
 
             half4 frag(Varyings varyings) : SV_Target
             {
-                float2 adjustedUv = ((varyings.uv - 0.5) / _ZoomLevel + 0.5) + _SubPixelOffset.xy;
+                // The render texture carries a margin of _EdgeMargin texels on every
+                // edge: the camera renders a wider region, and the screen maps the
+                // clean inner window - floor(screen/divisor) texels wide, the clean
+                // downscale ratio. The window size in UV is 1 - 2 * margin / texels.
+                // Sampling lives inside real texels at every zoom, so the subpixel
+                // offset never slides the window past a texture edge: the 1:1 smear
+                // and the repeat wrap band are both gone, and the subpixel glide
+                // survives at 1:1. The camera code mirrors this window in the picking
+                // seam (SubpixelCameraBase.GetAdjustedViewportPosition).
+                float2 windowSize = 1.0 - 2.0 * _EdgeMargin * _MainTex_TexelSize.xy;
+                float2 adjustedUv = (varyings.uv - 0.5) / _ZoomLevel * windowSize + 0.5 + _SubPixelOffset.xy;
                 half4 originalColor = SAMPLE_TEXTURE2D_GRAD(_MainTex, sampler_MainTex,
                     BilinearPointSamplingUV(adjustedUv, _MainTex_TexelSize), ddx(adjustedUv), ddy(adjustedUv));
                 
