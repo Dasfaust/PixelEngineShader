@@ -17,6 +17,9 @@ Shader "Custom/PixelEngineStarfield"
         _NebulaStrength("Nebula Strength", range(0, 1)) = 0.3
         _PixelsPerUnit("Pixels Per Unit (game pixels per world unit)", float) = 64
         _ScreenPxPerUnit("Screen Pixels Per World Unit", float) = 64
+        _PlaneInvSin("Screen Y Pixels Per World Z (1 over sin of the plane pitch)", float) = 1
+        _NebulaPixel("Nebula Lattice (screen pixels per noise cell)", float) = 4
+        _NebulaBands("Nebula Bands (posterize levels)", range(2, 64)) = 8
         _LagOffset("Lag Offset (quad screen offset, pattern axes)", Vector) = (0, 0, 0, 0)
     }
 
@@ -88,8 +91,11 @@ Shader "Custom/PixelEngineStarfield"
                 float  _ClusterWarp;
                 float  _NebulaCell;
                 float  _NebulaStrength;
+                float  _NebulaPixel;
+                float  _NebulaBands;
                 float  _PixelsPerUnit;
                 float  _ScreenPxPerUnit;
+                float  _PlaneInvSin;
                 float4 _LagOffset;
             CBUFFER_END
 
@@ -151,14 +157,25 @@ Shader "Custom/PixelEngineStarfield"
                     ValueNoise(w / _ClusterCell + float2(7.31, 3.17))) - 0.5;
                 float2 ws = w + warp * 2.0 * _ClusterWarp;
 
-                // Nebula: ridged value noise. 1 - abs(2n - 1) peaks where the
-                // noise crosses its midpoint, so the field reads as filaments
-                // crossing in two octaves, not as blobs. Squared, the ridge keeps
-                // the filaments and drops the flat ground to near dark.
-                float ridge1 = 1.0 - abs(2.0 * ValueNoise(ws / _NebulaCell) - 1.0);
-                float ridge2 = 1.0 - abs(2.0 * ValueNoise(ws / (_NebulaCell * 0.25)) - 1.0);
+                // Nebula: ridged value noise on a screen-pixel lattice, posterized
+                // into bands. 1 - abs(2n - 1) peaks where the noise crosses its
+                // midpoint, so the field reads as filaments crossing in two octaves,
+                // not as blobs. Squared, the ridge keeps the filaments and drops the
+                // flat ground to near dark. The lattice is authored in screen pixels
+                // (_NebulaPixel), so the field is flat inside a block and steps at
+                // block edges - the same game-pixel scale the star feather lands on,
+                // at any render scale and any plane pitch. The intensity then runs
+                // through floor(x * steps) / steps, the same form the lit shader's
+                // Posterize uses, so one banding law governs both shaders: filaments
+                // read as flat bands with hard edges, and not as a smooth gradient.
+                float2 pxPerWorld = float2(_PixelsPerUnit, _PixelsPerUnit * _PlaneInvSin);
+                float2 wsn = floor(ws * pxPerWorld / max(_NebulaPixel, 1.0))
+                           * max(_NebulaPixel, 1.0) / pxPerWorld;
+                float ridge1 = 1.0 - abs(2.0 * ValueNoise(wsn / _NebulaCell) - 1.0);
+                float ridge2 = 1.0 - abs(2.0 * ValueNoise(wsn / (_NebulaCell * 0.25)) - 1.0);
                 float ridge = ridge1 * ridge2;
-                float3 col = _NebulaColor.rgb * (ridge * ridge) * _NebulaStrength;
+                float glow = floor(ridge * ridge * max(_NebulaBands, 2.0)) / max(_NebulaBands, 2.0);
+                float3 col = _NebulaColor.rgb * glow * _NebulaStrength;
 
                 // Stars: one hashed star per world-unit cell, quantized placement,
                 // feathered at one game pixel so the edge lands on the pixel grid at
@@ -176,10 +193,20 @@ Shader "Custom/PixelEngineStarfield"
                 {
                     float2 offset = float2(CellHash(cu, 202u), CellHash(cu, 303u));
                     float2 starPos = (cell + 0.15 + offset * 0.7) * _CellSize;
-                    float r = _StarSize * 0.5;
-                    float px = 1.0 / _PixelsPerUnit;
-                    float d = distance(ws, starPos);
-                    float cover = 1.0 - smoothstep(r - px, r + px, d);
+                    // Screen-unit distance. One game pixel along X covers
+                    // 1/_PixelsPerUnit world X; one game pixel of screen height covers
+                    // that much world Z divided by sin of the plane pitch, and the rig
+                    // pushes 1/sin as _PlaneInvSin. This metric therefore measures whole
+                    // game pixels on both axes, so the disc and its one-pixel feather are
+                    // circular on screen at every pitch. The world-unit metric this
+                    // replaces measured a 1/sin ellipse: 3-4 px wide against 6-9 px tall
+                    // at pitch 35.264, where sin is 0.5736.
+                    float2 delta = (ws - starPos) * float2(_PixelsPerUnit, _PixelsPerUnit * _PlaneInvSin);
+                    float d = length(delta);
+                    // The authored star size is a world-unit diameter; in game pixels it
+                    // is the same number the screen-pixel fade below already reads.
+                    float r = _StarSize * 0.5 * _PixelsPerUnit;
+                    float cover = 1.0 - smoothstep(r - 1.0, r + 1.0, d);
                     // Brightness contrast skews the authored 0.45..1 spread toward
                     // its low end, so a few stars carry the field and the rest sit
                     // under it as grain.
