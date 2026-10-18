@@ -28,9 +28,19 @@ float3 SampleSceneNormal(float2 screenUv)
     return normalize(mul((float3x3)UNITY_MATRIX_V, sample.xyz));
 }
 
+// Threshold entry ramp: a measure past its threshold ramps in across [T, T * OUTLINE_RAMP_SPAN].
+// Every blend mode below weights by the mask, so a pixel whose measure sits near the threshold
+// travels an intensity band under sampling jitter, and does not flip.
+#define OUTLINE_RAMP_SPAN 1.25f
+
 // https://github.com/KodyJKing/hello-threejs
 float4 BlendOutlines(float4 diffuseColor, float4 outerColor, float4 innerColor, float2 screenUv, float thickness, float depthThreshold, float normalThreshold, float3 normalEdgeBias)
 {
+    // Whole texels: the neighbor reads land on texel centers of the point-sampled depth and
+    // normals textures, so each sample is a stored texel value. A fractional size lands the
+    // reads between texels, and the point filter snaps them to the nearest one.
+    float outlineSize = floor(thickness + 0.5f);
+
     float fragDepth = SampleSceneDepth(screenUv);
     
     float3 fragNormal = SampleSceneNormal(screenUv);
@@ -40,14 +50,14 @@ float4 BlendOutlines(float4 diffuseColor, float4 outerColor, float4 innerColor, 
         float4 objectOriginWS = mul(unity_ObjectToWorld, float4(0.0f, 0.0f, 0.0f, 1.0f));
         float distanceWS = distance(_WorldSpaceCameraPos, objectOriginWS.xyz);
         float distancePercentage = Remap(distanceWS, float2(0, _PerspectiveOutlineMaxDistance), float2(1.0f, 0));
-        thickness *= distancePercentage;
+        outlineSize = floor(outlineSize * distancePercentage + 0.5f);
     #endif
 
     float2 uvCoords[4];
-    uvCoords[0] = screenUv + (float2(1.0f, 0.0f) * _CameraDepthTexture_TexelSize.xy * thickness);
-    uvCoords[1] = screenUv + (float2(-1.0f, 0.0f) * _CameraDepthTexture_TexelSize.xy * thickness);
-    uvCoords[2] = screenUv + (float2(0.0f, 1.0f) * _CameraDepthTexture_TexelSize.xy * thickness);
-    uvCoords[3] = screenUv + (float2(0.0f, -1.0f) * _CameraDepthTexture_TexelSize.xy * thickness);
+    uvCoords[0] = screenUv + (float2(1.0f, 0.0f) * _CameraDepthTexture_TexelSize.xy * outlineSize);
+    uvCoords[1] = screenUv + (float2(-1.0f, 0.0f) * _CameraDepthTexture_TexelSize.xy * outlineSize);
+    uvCoords[2] = screenUv + (float2(0.0f, 1.0f) * _CameraDepthTexture_TexelSize.xy * outlineSize);
+    uvCoords[3] = screenUv + (float2(0.0f, -1.0f) * _CameraDepthTexture_TexelSize.xy * outlineSize);
 
     float depthDifference = 0.0f;
     float dotSum = 0.0f;
@@ -55,14 +65,20 @@ float4 BlendOutlines(float4 diffuseColor, float4 outerColor, float4 innerColor, 
     {
         depthDifference += SampleSceneDepth(uvCoords[i]) - fragDepth;
         float3 normalDifference = SampleSceneNormal(uvCoords[i]) - fragNormal;
-        float normalBiasDifference = dot(normalDifference, normalEdgeBias);
-        float normalIndicator = smoothstep(-0.01, 0.1, normalBiasDifference);
+        // The magnitude keeps the window symmetric: a normal slope crossing the fragment in
+        // one direction counts the same as the slope crossing it in the other.
+        float normalBiasDifference = abs(dot(normalDifference, normalEdgeBias));
+        float normalIndicator = smoothstep(0.01, 0.1, normalBiasDifference);
         dotSum += dot(normalDifference, normalDifference) * normalIndicator;
     }
 
-    depthDifference = step(depthThreshold, depthDifference);
-    float normalDifference = step(normalThreshold, sqrt(dotSum));
-    normalDifference = depthDifference > 0 ? 0 : normalDifference;
+    // The symmetric pairs cancel on a planar slope, so the surviving depth sum marks a depth
+    // discontinuity, positive on the low side of the step.
+    depthDifference = smoothstep(depthThreshold, depthThreshold * OUTLINE_RAMP_SPAN, depthDifference);
+    float normalDifference = smoothstep(normalThreshold, normalThreshold * OUTLINE_RAMP_SPAN, sqrt(dotSum));
+    // The outer mask gates the inner mask: at a depth discontinuity the inner outline yields
+    // to the outer, and the gate blends across the ramp band.
+    normalDifference = (1.0f - depthDifference) * normalDifference;
     
     float4 outlineColor = (outerColor * depthDifference) + (innerColor * normalDifference);
 
