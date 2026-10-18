@@ -52,7 +52,7 @@ Shader "PixelEngineLit"
         [HDR] _OuterOutlineColor("Outer Outline Color", color) = (1, 0.945098, 0.9098039, 1)
         _OuterOutlineThreshold("Outer Outline Threshold", float) = 0.1
         [HDR] _InnerOutlineColor("Inner Outline Color", color) = (0.4705882, 0.454902, 0.454902, 1)
-        _InnerOutlineThreshold("Inner Outline Threshold", float) = 0.15
+        _InnerOutlineThreshold("Inner Outline Threshold", float) = 0.2
         _InnerOutlineBias("Inner Outline Bias", vector) = (1, 1, 1, 0)
 
         [Header(Pixel Stabilization)]
