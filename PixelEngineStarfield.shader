@@ -12,6 +12,7 @@ Shader "Custom/PixelEngineStarfield"
         _NebulaStrength("Nebula Strength", range(0, 1)) = 0.18
         _PixelsPerUnit("Pixels Per Unit (game pixels per world unit)", float) = 64
         _ScreenPxPerUnit("Screen Pixels Per World Unit", float) = 64
+        _LagOffset("Lag Offset (quad screen offset, pattern axes)", Vector) = (0, 0, 0, 0)
     }
 
     // The pass skeleton mirrors "Universal Render Pipeline/Unlit" from this pipeline version:
@@ -79,6 +80,7 @@ Shader "Custom/PixelEngineStarfield"
                 float  _NebulaStrength;
                 float  _PixelsPerUnit;
                 float  _ScreenPxPerUnit;
+                float4 _LagOffset;
             CBUFFER_END
 
             // Cell hash in float space: the star field is cosmetic and the server
@@ -116,7 +118,12 @@ Shader "Custom/PixelEngineStarfield"
 
             half4 frag(Varyings IN) : SV_Target
             {
-                float2 w = IN.worldXZ;
+                // The rig anchors the pattern here and pushes the quad's smooth
+                // screen offset: shifting the sampling window by -offset shows the
+                // pattern at +offset on screen, which is the layer's lag law running
+                // continuously. The quad's grid snap cancels out of this sampling -
+                // it moves the window's edges, not the stars.
+                float2 w = IN.worldXZ - _LagOffset.xy;
 
                 // Nebula: smooth low-amplitude gradient in world units, authored in
                 // coarse cells so it reads soft at 1:1 and keeps covering ground at
