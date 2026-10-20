@@ -249,17 +249,22 @@ Shader "PixelEngine/Warp Flow"
                 float c = dist / max(_RayPath, 0.01f);
                 float travel = WarpTravelTime(c, _Accel);
 
-                // Streak coordinate: u = 0 at a head, u -> 1 at its tail.
-                // Diverging, the stream runs outward, so the tail trails
-                // inward: u rides (travel - tau). Converging, the stream runs
-                // inward, arriving at the point as tau completes, so the tail
-                // trails outward: u rides ((1 - travel) - tau).
+                // Streak coordinate: u = 0 at the head, u -> 1 at the tail,
+                // measured from head to tail along the way the streak came, so
+                // the tail trails the head's travel. Diverging, the stream runs
+                // outward: tau - travel falls with distance, so the tail lies
+                // toward the point and the head runs outward ahead of it.
+                // Converging, the stream runs inward: travel - (1 - tau) rises
+                // with distance, so the tail lies toward the edge and the head
+                // arrives at the point. In both signs the cycle wrap moves the
+                // coordinate by exactly the streak count, so the integer count
+                // and the slot rule keep the wrap seamless.
                 // The cell index k names each streak along the ray and travels
                 // with it, so a hash of (ray, k) is a per-streak number that
                 // holds while the streak runs.
                 float streakCoord = (_AxialSign > 0)
-                    ? _StreakDensity * (travel - tau)
-                    : _StreakDensity * ((1.0 - travel) - tau);
+                    ? _StreakDensity * (tau - travel)
+                    : _StreakDensity * (travel - (1.0 - tau));
                 float streakIndex = floor(streakCoord);
                 float u = frac(streakCoord);
 
