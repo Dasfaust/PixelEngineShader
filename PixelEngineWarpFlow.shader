@@ -9,7 +9,7 @@ Shader "PixelEngine/Warp Flow"
 
         [Header(Motion)]
         _FlowRate("Flow Rate", Float) = 0.3
-        _Accel("Acceleration Exponent (0 linear, 2..4 accelerating)", Float) = 2
+        _Accel("Acceleration Exponent (speed ratio e^k across path)", Float) = 2
         _RayPath("Ray Path (UV length)", Float) = 1.2
 
         [Header(Size)]
@@ -162,16 +162,25 @@ Shader "PixelEngine/Warp Flow"
             // so the side views need no special case. _RayCount sets the density
             // and _RayWidth the ray size, as a fraction of each angular sector.
             //
-            // Comets: each ray carries its own streak heads that travel along the
-            // ray from the vanishing point outward under AxialSign +1 and inward
-            // under -1, so diverge, converge, and parallel are one field with the
-            // sign and the distance. A head runs one cycle in 1 / _FlowRate, and
-            // _Accel warps the cycle so the head speeds up along the path — the
-            // acceleration read, and for the converge side it arrives fast. The
-            // head position is bounded inside the cycle, so the pattern never
-            // reverses; the first landing advected a distance-proportional speed
-            // against unbounded time, and its ring positions crossed a pole at
-            // (ray path scale) / (flow rate x speed gain), which read as reversal.
+            // Comets: each ray carries its own streak heads, and the flow is a
+            // steady accelerating stream: a streak's speed answers its distance
+            // from the vanishing point and never the clock. Speed grows
+            // exponentially along the path — e^_Accel times from the point to
+            // the path end — so a streak runs slow at the point, gathers speed,
+            // and crosses the edge fast; the near and far fades hide the spawn
+            // and the death, and the cycle wrap stays seamless because the
+            // travel coordinate spans exactly the streak count in wavelengths.
+            // Under AxialSign +1 the stream runs outward; under -1 the same
+            // field runs inward, so the converging streaks recede from the
+            // edge toward the point, gathering speed as they go and arriving
+            // slow at the point, the recede read. The first landing ran the
+            // head along the path on the cycle clock, so every streak's speed
+            // rode the cycle profile and reset fast-to-slow when the cycle
+            // restarted mid-flight — a flow that ended too early and a speed
+            // that kicked; the report read it as an animation loop. No
+            // distance-times-time term exists in either model, so no pole and
+            // no reversal; the play-mode mirror at the retired pole time
+            // (12 / (0.3 x 0.6) = 66.7 s) stands.
             // The consuming rig writes _RayPath per pose, running it past the
             // farthest screen corner: the side and nadir views land the point off
             // screen, and the visible screen then starts at a larger distance, so
@@ -196,14 +205,18 @@ Shader "PixelEngine/Warp Flow"
             // _RayColor1..3 picked per ray by the ray hash, discrete and not
             // blended. _RaySeed moves the picks. The HDR gain multiplies the
             // band above 1.0, the contract for a layer riding an HDR post path.
-            // Head position along one cycle: h(0) = 0 at the vanishing point,
-            // h(1) = 1 at the path end. _Accel 0 answers the linear h = tau; a
-            // positive exponent runs the head faster late in the cycle, the
-            // acceleration read.
-            float WarpHead(float tau, float accel)
+            // Travel-time coordinate: the clock a streak needs to reach path
+            // coordinate c in a flow whose speed grows exponentially along the
+            // path. It is the inverse of the head curve h(tau) = (exp(k tau) - 1)
+            // / (exp(k) - 1), so the speed a point answers is h'(h^-1(c)) =
+            // rate x k x exp(k c) / (exp(k) - 1): set by the distance, steady in
+            // time, ratio exp(k) from the vanishing point to the path end.
+            // Streak spacing inherits the speed: gaps grow toward the edge, the
+            // spreading the accelerating flow must answer.
+            float WarpTravelTime(float c, float accel)
             {
                 float k = max(accel, 0.001f);
-                return (exp(k * tau) - 1.0) / (exp(k) - 1.0);
+                return log(1.0 + c * (exp(k) - 1.0)) / k;
             }
 
             half4 frag(Varyings varyings) : SV_Target
@@ -224,28 +237,29 @@ Shader "PixelEngine/Warp Flow"
                 float colorHash = WarpHash(rayIndex * 7.13 + _RaySeed * 3.71);
                 float pickHash = WarpHash(rayIndex * 31.71 + _RaySeed * 11.3);
 
-                // Cycle coordinate, uniform in the ray and bounded in [0, 1):
-                // no distance-times-time shear, so no pole, so no reversal.
-                // _Stagger spreads the per-ray phase over cycle fractions, so
-                // rays run their streaks out of step.
+                // Cycle coordinate: the flow clock, uniform across the screen
+                // and bounded in [0, 1). _Stagger spreads the per-ray phase
+                // over cycle fractions, so rays run their streaks out of step.
                 float tau = frac(_FlowRate * _Time.y + rayPhase * _Stagger);
-                float head = WarpHead(tau, _Accel);
 
                 // Path coordinate along the ray: 0 at the vanishing point,
-                // 1 at the path end.
+                // 1 at the path end. The travel coordinate converts it to the
+                // steady-flow clock, so the streak speed answers the distance
+                // and the wrap drop is exactly the streak count.
                 float c = dist / max(_RayPath, 0.01f);
+                float travel = WarpTravelTime(c, _Accel);
 
                 // Streak coordinate: u = 0 at a head, u -> 1 at its tail.
-                // Diverging, the head runs outward, so the tail trails inward:
-                // u rides (head - c). Converging, the head runs inward
-                // (1 - head) and accelerates toward the point, so the tail
-                // trails outward: u rides (c - (1 - head)).
+                // Diverging, the stream runs outward, so the tail trails
+                // inward: u rides (travel - tau). Converging, the stream runs
+                // inward, arriving at the point as tau completes, so the tail
+                // trails outward: u rides ((1 - travel) - tau).
                 // The cell index k names each streak along the ray and travels
                 // with it, so a hash of (ray, k) is a per-streak number that
                 // holds while the streak runs.
                 float streakCoord = (_AxialSign > 0)
-                    ? _StreakDensity * (head - c)
-                    : _StreakDensity * (c - (1.0 - head));
+                    ? _StreakDensity * (travel - tau)
+                    : _StreakDensity * ((1.0 - travel) - tau);
                 float streakIndex = floor(streakCoord);
                 float u = frac(streakCoord);
 
