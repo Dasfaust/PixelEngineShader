@@ -16,6 +16,7 @@ Shader "PixelEngine/Warp Flow"
         _RayWidth("Ray Width (sector fraction)", Range(0.05, 1)) = 0.35
         _TailSharp("Tail Sharpness (streak length along ray)", Range(0.5, 8)) = 3
         _Stagger("Ray Stagger (cycle spread)", Range(0, 2)) = 1
+        _StaggerOffset("Streak Offset (lane fraction, signed)", Range(0, 1)) = 0.5
         _StreakDensity("Streak Density (streaks per ray)", Float) = 12
 
         [Header(Look)]
@@ -103,6 +104,7 @@ Shader "PixelEngine/Warp Flow"
                 float _RayWidth;
                 float _TailSharp;
                 float _Stagger;
+                float _StaggerOffset;
                 float _StreakDensity;
                 float _BandCount;
                 float _NearFade;
@@ -181,8 +183,13 @@ Shader "PixelEngine/Warp Flow"
             // PixelEngineLit linear light quantization, so the ramp presents as
             // bands and no gradient. _TailSharp sets the streak length along the
             // ray. _Stagger spreads each ray's cycle phase, so rays run out of
-            // step; 0 runs them in phase. The UV answers on the render-texture
-            // grid cell, so the streaks share the world's pixel size.
+            // step; 0 runs them in phase. _StaggerOffset offsets each streak's
+            // arc left or right of its sector center, signed by a hash of the
+            // ray and the streak's cell index, so streaks run out of line
+            // laterally, at random; the offset holds for the streak's whole run,
+            // and 0 runs them on the center line. The UV answers on the
+            // render-texture grid cell, so the streaks share the world's pixel
+            // size.
             //
             // Color: the majority of rays answer the base color. _ColorIntensity
             // is the fraction that carries a palette color instead, one of
@@ -217,8 +224,6 @@ Shader "PixelEngine/Warp Flow"
                 float colorHash = WarpHash(rayIndex * 7.13 + _RaySeed * 3.71);
                 float pickHash = WarpHash(rayIndex * 31.71 + _RaySeed * 11.3);
 
-                float arc = saturate(1.0 - abs(sectorPos - 0.5) * 2.0 / max(_RayWidth, 0.01f));
-
                 // Cycle coordinate, uniform in the ray and bounded in [0, 1):
                 // no distance-times-time shear, so no pole, so no reversal.
                 // _Stagger spreads the per-ray phase over cycle fractions, so
@@ -235,9 +240,29 @@ Shader "PixelEngine/Warp Flow"
                 // u rides (head - c). Converging, the head runs inward
                 // (1 - head) and accelerates toward the point, so the tail
                 // trails outward: u rides (c - (1 - head)).
-                float u = (_AxialSign > 0)
-                    ? frac(_StreakDensity * (head - c))
-                    : frac(_StreakDensity * (c - (1.0 - head)));
+                // The cell index k names each streak along the ray and travels
+                // with it, so a hash of (ray, k) is a per-streak number that
+                // holds while the streak runs.
+                float streakCoord = (_AxialSign > 0)
+                    ? _StreakDensity * (head - c)
+                    : _StreakDensity * (c - (1.0 - head));
+                float streakIndex = floor(streakCoord);
+                float u = frac(streakCoord);
+
+                // Lateral stagger: the per-streak hash signs an offset of the
+                // arc center inside its sector, so each streak runs left or
+                // right of the ray's center line, randomly, and the offset
+                // holds for the streak's whole run. The lane travel is the
+                // free half-space each side of center, (1 - _RayWidth) / 2, so
+                // an offset of 1 lands the streak edge on the sector border
+                // and rays never cross. The offset is angular, so the streak
+                // runs a line pivoted on the vanishing point: it spawns at
+                // the point and fans out, and in the parallel side views the
+                // same shift reads as a lateral displacement.
+                float offsetHash = WarpHash(rayIndex * 17.13 + streakIndex * 5.17 + _RaySeed * 7.91) * 2.0 - 1.0;
+                float lane = 0.5 * (1.0 - max(_RayWidth, 0.01f));
+                float arcCenter = 0.5 + offsetHash * _StaggerOffset * lane;
+                float arc = saturate(1.0 - abs(sectorPos - arcCenter) * 2.0 / max(_RayWidth, 0.01f));
 
                 // Ramp along the streak: brightest at the head, fading to the
                 // tail over the wavelength. _TailSharp sets the streak length.
