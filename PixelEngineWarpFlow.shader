@@ -145,7 +145,20 @@ Shader "PixelEngine/Warp Flow"
                 Varyings varyings;
                 varyings.positionHCS = TransformObjectToHClip(attributes.positionOS.xyz);
                 varyings.color = attributes.color;
-                varyings.uv = attributes.uv;
+                // Blit flip compensation, the UI/Default convention: a
+                // Graphics.Blit into a texture flips the v axis on the
+                // top-first graphics device APIs. The rig blits this shader
+                // into the warp texture, and the canvas samples the texture
+                // unflipped, so the compensation keeps the vanishing point on
+                // the side the projection names.
+                float2 uv = attributes.uv;
+#if defined(UNITY_UV_STARTS_AT_TOP)
+                if (_ProjectionParams.x < 0f)
+                {
+                    uv.y = 1.0 - uv.y;
+                }
+#endif
+                varyings.uv = uv;
                 varyings.positionWS = TransformObjectToWorld(attributes.positionOS.xyz);
                 return varyings;
             }
@@ -198,11 +211,11 @@ Shader "PixelEngine/Warp Flow"
             // arc left or right of its sector center, signed by a hash of the
             // ray and the streak's cell index, so streaks run out of line
             // laterally, at random; the offset holds for the streak's whole run,
-            // and 0 runs them on the center line. The UV answers on the
-            // render-texture grid cell times _PixelScale, so the streaks
-            // share the world's pixel size at 1 and step in whole world
-            // pixels above it — the edges stair-step and the layer reads
-            // pixelated like the world.
+            // and 0 runs them on the center line. The UV answers on the warp
+            // texture's grid cell times _PixelScale: the rig renders the
+            // texture at screen resolution divided by its render scale and
+            // the canvas upscales it point-filtered, so the streak pixels are
+            // whole, uniform, and answer no screen-resolution grid.
             //
             // Color: the majority of rays answer the base color. _ColorIntensity
             // is the fraction that carries a palette color instead, one of
@@ -225,11 +238,10 @@ Shader "PixelEngine/Warp Flow"
 
             half4 frag(Varyings varyings) : SV_Target
             {
-                // Streak pixels ride the render-texture grid cell times the
-                // authored pixel scale: at 1 a streak pixel is one world pixel
-                // and the wedge edges land sub-pixel precise; at 2 and up they
-                // step in whole multiples of the world pixel, so the edges
-                // stair-step and the layer reads pixelated like the world.
+                // Streak pixels ride the warp texture's grid cell times the
+                // authored pixel scale: the rig writes the cell as one warp
+                // texture pixel, so a streak pixel is render scale x pixel
+                // scale screen pixels wide, uniform across the frame.
                 float2 cell = _GridCell.xy * max(_PixelScale, 1.0);
                 float2 p = floor(varyings.uv / cell) * cell + 0.5 * cell;
 
