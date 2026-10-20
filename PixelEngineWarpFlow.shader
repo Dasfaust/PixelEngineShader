@@ -252,14 +252,26 @@ Shader "PixelEngine/Warp Flow"
                 // Lateral stagger: the per-streak hash signs an offset of the
                 // arc center inside its sector, so each streak runs left or
                 // right of the ray's center line, randomly, and the offset
-                // holds for the streak's whole run. The lane travel is the
-                // free half-space each side of center, (1 - _RayWidth) / 2, so
-                // an offset of 1 lands the streak edge on the sector border
-                // and rays never cross. The offset is angular, so the streak
-                // runs a line pivoted on the vanishing point: it spawns at
-                // the point and fans out, and in the parallel side views the
-                // same shift reads as a lateral displacement.
-                float offsetHash = WarpHash(rayIndex * 17.13 + streakIndex * 5.17 + _RaySeed * 7.91) * 2.0 - 1.0;
+                // holds for the streak's whole run. The hash is indexed by the
+                // streak's slot in the ray, counted modulo the streak count:
+                // the cycle wrap shifts every streak index by the count — the
+                // brightness is immune, because the pattern repeats every
+                // wavelength, and a slot index past the count would inherit
+                // the next slot's hash, so the whole configuration would swap
+                // offsets at every wrap — the configuration snap, once per
+                // cycle, read at the long streaks near the screen edge. The
+                // slot modulo the count is invariant across the wrap and
+                // constant while the streak travels, so the configuration
+                // stands. The lane travel is the free half-space each side of
+                // center, (1 - _RayWidth) / 2, so an offset of 1 lands the
+                // streak edge on the sector border and rays never cross. The
+                // offset is angular, so the streak runs a line pivoted on the
+                // vanishing point: it spawns at the point and fans out, and
+                // in the parallel side views the same shift reads as a
+                // lateral displacement.
+                float density = max(_StreakDensity, 1.0);
+                float slot = fmod(fmod(streakIndex, density) + density, density);
+                float offsetHash = WarpHash(rayIndex * 17.13 + slot * 5.17 + _RaySeed * 7.91) * 2.0 - 1.0;
                 float lane = 0.5 * (1.0 - max(_RayWidth, 0.01f));
                 float arcCenter = 0.5 + offsetHash * _StaggerOffset * lane;
                 float arc = saturate(1.0 - abs(sectorPos - arcCenter) * 2.0 / max(_RayWidth, 0.01f));
