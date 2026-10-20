@@ -153,7 +153,7 @@ Shader "PixelEngine/Warp Flow"
                 // the side the projection names.
                 float2 uv = attributes.uv;
 #if defined(UNITY_UV_STARTS_AT_TOP)
-                if (_ProjectionParams.x < 0f)
+                if (_ProjectionParams.x < 0.0)
                 {
                     uv.y = 1.0 - uv.y;
                 }
