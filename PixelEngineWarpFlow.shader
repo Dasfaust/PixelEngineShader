@@ -145,20 +145,16 @@ Shader "PixelEngine/Warp Flow"
                 Varyings varyings;
                 varyings.positionHCS = TransformObjectToHClip(attributes.positionOS.xyz);
                 varyings.color = attributes.color;
-                // Blit flip compensation, the UI/Default convention: a
-                // Graphics.Blit into a texture flips the v axis on the
-                // top-first graphics device APIs. The rig blits this shader
-                // into the warp texture, and the canvas samples the texture
-                // unflipped, so the compensation keeps the vanishing point on
-                // the side the projection names.
-                float2 uv = attributes.uv;
-#if defined(UNITY_UV_STARTS_AT_TOP)
-                if (_ProjectionParams.x < 0.0)
-                {
-                    uv.y = 1.0 - uv.y;
-                }
-#endif
-                varyings.uv = uv;
+                // No blit flip here, measured: a Graphics.Blit with no source
+                // stores what the pass draws, and the RawImage samples the
+                // stored texture upright. The UI/Default flip convention
+                // belongs to the camera-into-texture path, where the camera
+                // flips its projection; this pass has no camera and no
+                // source, and the compensation measured as a vertical
+                // mirror of the field - the nadir probe recorded the pattern
+                // answering 1.5 below the screen when the projection names
+                // it 1.5 above.
+                varyings.uv = attributes.uv;
                 varyings.positionWS = TransformObjectToWorld(attributes.positionOS.xyz);
                 return varyings;
             }
