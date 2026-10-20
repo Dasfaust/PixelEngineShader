@@ -170,6 +170,11 @@ Shader "PixelEngine/Warp Flow"
             // reverses; the first landing advected a distance-proportional speed
             // against unbounded time, and its ring positions crossed a pole at
             // (ray path scale) / (flow rate x speed gain), which read as reversal.
+            // The consuming rig writes _RayPath per pose, running it past the
+            // farthest screen corner: the side and nadir views land the point off
+            // screen, and the visible screen then starts at a larger distance, so
+            // a path shorter than that corner puts every visible pixel past the
+            // far fade.
             //
             // Length bands: brightness ramps along the streak, brightest at the
             // head and fading to the tail, quantized through Posterize, the
