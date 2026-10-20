@@ -6,24 +6,27 @@ Shader "PixelEngine/Warp Flow"
         _VanishPoint("Vanishing Point (UV)", Vector) = (0.5, 0.5, 0, 0)
         _AxialSign("Axial Sign (diverge 1, converge -1)", Float) = 1
         _RayCount("Ray Count", Float) = 24
-        _StreakDensity("Streak Density (per UV width)", Float) = 12
 
         [Header(Motion)]
         _FlowRate("Flow Rate", Float) = 0.3
-        _SpeedGain("Speed Gain with Distance", Float) = 0.6
+        _Accel("Acceleration Exponent (0 linear, 2..4 accelerating)", Float) = 2
+        _RayPath("Ray Path (UV length)", Float) = 1.2
 
         [Header(Size)]
         _RayWidth("Ray Width (sector fraction)", Range(0.05, 1)) = 0.35
-        _StreakWidth("Streak Width (wavelength fraction)", Range(0.05, 1)) = 0.35
+        _TailSharp("Tail Sharpness (streak length along ray)", Range(0.5, 8)) = 3
+        _Stagger("Ray Stagger (cycle spread)", Range(0, 2)) = 1
+        _StreakDensity("Streak Density (streaks per ray)", Float) = 12
 
         [Header(Look)]
         _BandCount("Brightness Bands", Float) = 4
         _NearFade("Near Fade (per UV distance)", Float) = 6
+        _FarFade("Far Fade (per UV distance at path end)", Float) = 3
         _BaseColor("Base Color", Color) = (0.72, 0.84, 1, 1)
         _RayColor1("Ray Color 1", Color) = (0.35, 0.85, 1, 1)
         _RayColor2("Ray Color 2", Color) = (0.62, 0.45, 1, 1)
         _RayColor3("Ray Color 3", Color) = (1, 0.72, 0.4, 1)
-        _ColorIntensity("Color Intensity (0 base, 1 palette)", Range(0, 1)) = 0.5
+        _ColorIntensity("Color Intensity (fraction of colored rays)", Range(0, 1)) = 0.3
         _RaySeed("Ray Seed", Float) = 0
         _Intensity("Intensity", Float) = 0
 
@@ -94,13 +97,16 @@ Shader "PixelEngine/Warp Flow"
                 float4 _VanishPoint;
                 float _AxialSign;
                 float _RayCount;
-                float _StreakDensity;
                 float _FlowRate;
-                float _SpeedGain;
+                float _Accel;
+                float _RayPath;
                 float _RayWidth;
-                float _StreakWidth;
+                float _TailSharp;
+                float _Stagger;
+                float _StreakDensity;
                 float _BandCount;
                 float _NearFade;
+                float _FarFade;
                 float4 _BaseColor;
                 float4 _RayColor1;
                 float4 _RayColor2;
@@ -154,21 +160,40 @@ Shader "PixelEngine/Warp Flow"
             // so the side views need no special case. _RayCount sets the density
             // and _RayWidth the ray size, as a fraction of each angular sector.
             //
-            // Pulses: streaks travel along a ray's distance from the vanishing
-            // point, outward under AxialSign +1 and inward under -1, so diverge,
-            // converge, and parallel are one field with the sign and the distance.
-            // Speed grows with the distance, the acceleration read. _StreakWidth
-            // is the lit fraction of the pulse wavelength, the streak size.
+            // Comets: each ray carries its own streak heads that travel along the
+            // ray from the vanishing point outward under AxialSign +1 and inward
+            // under -1, so diverge, converge, and parallel are one field with the
+            // sign and the distance. A head runs one cycle in 1 / _FlowRate, and
+            // _Accel warps the cycle so the head speeds up along the path — the
+            // acceleration read, and for the converge side it arrives fast. The
+            // head position is bounded inside the cycle, so the pattern never
+            // reverses; the first landing advected a distance-proportional speed
+            // against unbounded time, and its ring positions crossed a pole at
+            // (ray path scale) / (flow rate x speed gain), which read as reversal.
             //
-            // Bands: the brightness answers through Posterize, the PixelEngineLit
-            // linear light quantization, so the streaks present as bands and no
-            // gradient. The UV answers on the render-texture grid cell, so the
-            // streaks share the world's pixel size.
+            // Length bands: brightness ramps along the streak, brightest at the
+            // head and fading to the tail, quantized through Posterize, the
+            // PixelEngineLit linear light quantization, so the ramp presents as
+            // bands and no gradient. _TailSharp sets the streak length along the
+            // ray. _Stagger spreads each ray's cycle phase, so rays run out of
+            // step; 0 runs them in phase. The UV answers on the render-texture
+            // grid cell, so the streaks share the world's pixel size.
             //
-            // Color: one hash per ray index picks one of three palette colors,
-            // mixed onto the base color by _ColorIntensity, and _RaySeed moves
-            // the picks. The HDR gain multiplies the band above 1.0, the
-            // contract for a layer riding an HDR post path.
+            // Color: the majority of rays answer the base color. _ColorIntensity
+            // is the fraction that carries a palette color instead, one of
+            // _RayColor1..3 picked per ray by the ray hash, discrete and not
+            // blended. _RaySeed moves the picks. The HDR gain multiplies the
+            // band above 1.0, the contract for a layer riding an HDR post path.
+            // Head position along one cycle: h(0) = 0 at the vanishing point,
+            // h(1) = 1 at the path end. _Accel 0 answers the linear h = tau; a
+            // positive exponent runs the head faster late in the cycle, the
+            // acceleration read.
+            float WarpHead(float tau, float accel)
+            {
+                float k = max(accel, 0.001f);
+                return (exp(k * tau) - 1.0) / (exp(k) - 1.0);
+            }
+
             half4 frag(Varyings varyings) : SV_Target
             {
                 float2 p = floor(varyings.uv / _GridCell.xy) * _GridCell.xy + 0.5 * _GridCell.xy;
@@ -177,38 +202,58 @@ Shader "PixelEngine/Warp Flow"
                 float dist = length(d);
                 float ang = atan2(d.y, d.x);
 
-                // Sector coordinates: the ray index sets the phase and the color
-                // pick, and the position inside the sector answers the arc mask,
-                // so _RayWidth sets the ray size in fraction of a sector.
+                // Sector coordinates: the ray index sets the cycle phase and the
+                // color pick, and the position inside the sector answers the arc
+                // mask, so _RayWidth sets the ray size in fraction of a sector.
                 float sector = ang * _RayCount / (2.0 * WARP_PI);
                 float rayIndex = floor(sector);
                 float sectorPos = frac(sector);
                 float rayPhase = WarpHash(rayIndex * 12.9898);
                 float colorHash = WarpHash(rayIndex * 7.13 + _RaySeed * 3.71);
+                float pickHash = WarpHash(rayIndex * 31.71 + _RaySeed * 11.3);
 
                 float arc = saturate(1.0 - abs(sectorPos - 0.5) * 2.0 / max(_RayWidth, 0.01f));
 
-                float speed = 0.25 + dist * _SpeedGain;
-                // The sign rides the distance term only: it flips the pulse
-                // direction, +1 outward from the vanishing point and -1 inward.
-                // Riding the time term too would leave the direction fixed and
-                // flip only the phase.
-                float pulse = frac(dist * _StreakDensity * _AxialSign - _FlowRate * _Time.y * speed + rayPhase);
-                // _StreakWidth is the lit fraction of the pulse wavelength, the
-                // streak size along the ray.
-                float ridge = saturate((1.0 - abs(2.0 * pulse - 1.0)) / max(_StreakWidth, 0.01f));
+                // Cycle coordinate, uniform in the ray and bounded in [0, 1):
+                // no distance-times-time shear, so no pole, so no reversal.
+                // _Stagger spreads the per-ray phase over cycle fractions, so
+                // rays run their streaks out of step.
+                float tau = frac(_FlowRate * _Time.y + rayPhase * _Stagger);
+                float head = WarpHead(tau, _Accel);
 
+                // Path coordinate along the ray: 0 at the vanishing point,
+                // 1 at the path end.
+                float c = dist / max(_RayPath, 0.01f);
+
+                // Streak coordinate: u = 0 at a head, u -> 1 at its tail.
+                // Diverging, the head runs outward, so the tail trails inward:
+                // u rides (head - c). Converging, the head runs inward
+                // (1 - head) and accelerates toward the point, so the tail
+                // trails outward: u rides (c - (1 - head)).
+                float u = (_AxialSign > 0)
+                    ? frac(_StreakDensity * (head - c))
+                    : frac(_StreakDensity * (c - (1.0 - head)));
+
+                // Ramp along the streak: brightest at the head, fading to the
+                // tail over the wavelength. _TailSharp sets the streak length.
+                float ramp = pow(1.0 - u, max(_TailSharp, 0.01f));
+
+                // Fades hide the cycle ends: the near fade covers the spawn
+                // at the vanishing point, the far fade covers the death at
+                // the path end, so a cycle wrap reads as flow and not as pop.
                 float nearFade = saturate(dist * _NearFade);
-                float value = ridge * arc * nearFade * saturate(_Intensity);
+                float farFade = saturate((_RayPath - dist) * _FarFade);
+                float value = ramp * arc * nearFade * farFade * saturate(_Intensity);
                 float band = PosterizeLocal(value, _BandCount);
 
-                // One palette color per ray, picked by the ray hash, mixed onto
-                // the base by _ColorIntensity: 0 answers all base, 1 answers the
-                // palette whole.
+                // Majority base: a ray carries a palette color only where the
+                // color hash lands under _ColorIntensity, the fraction of
+                // colored rays. The pick hash names which of the three. The
+                // answer is discrete, not blended onto the base.
                 float4 pick = _RayColor1;
-                pick = (colorHash > 0.3333) ? _RayColor2 : pick;
-                pick = (colorHash > 0.6666) ? _RayColor3 : pick;
-                float4 rayColor = lerp(_BaseColor, pick, _ColorIntensity);
+                pick = (pickHash > 0.3333) ? _RayColor2 : pick;
+                pick = (pickHash > 0.6666) ? _RayColor3 : pick;
+                float4 rayColor = (colorHash < _ColorIntensity) ? pick : _BaseColor;
 
                 // HDR: the gain pushes the band above 1.0. The blend keeps the
                 // alpha in 0..1 and the rgb carries the gain.
