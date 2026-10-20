@@ -40,6 +40,7 @@ Shader "PixelEngine/Warp Flow"
 
         [Header(Grid)]
         _GridCell("Grid Cell (UV xy)", Vector) = (0.005, 0.005, 0, 0)
+        _PixelScale("Pixel Scale (grid cells per streak pixel)", Range(1, 8)) = 2
 
         [Header(UI)]
         // UGUI's canvas path requires _MainTex on a UI material; RawImage
@@ -118,6 +119,7 @@ Shader "PixelEngine/Warp Flow"
                 float _Intensity;
                 float _HDRGain;
                 float4 _GridCell;
+                float _PixelScale;
                 float4 _ClipRect;
                 float4 _ClipRectMin;
                 float2 _MaskSoftnessXY;
@@ -197,8 +199,10 @@ Shader "PixelEngine/Warp Flow"
             // ray and the streak's cell index, so streaks run out of line
             // laterally, at random; the offset holds for the streak's whole run,
             // and 0 runs them on the center line. The UV answers on the
-            // render-texture grid cell, so the streaks share the world's pixel
-            // size.
+            // render-texture grid cell times _PixelScale, so the streaks
+            // share the world's pixel size at 1 and step in whole world
+            // pixels above it — the edges stair-step and the layer reads
+            // pixelated like the world.
             //
             // Color: the majority of rays answer the base color. _ColorIntensity
             // is the fraction that carries a palette color instead, one of
@@ -221,7 +225,13 @@ Shader "PixelEngine/Warp Flow"
 
             half4 frag(Varyings varyings) : SV_Target
             {
-                float2 p = floor(varyings.uv / _GridCell.xy) * _GridCell.xy + 0.5 * _GridCell.xy;
+                // Streak pixels ride the render-texture grid cell times the
+                // authored pixel scale: at 1 a streak pixel is one world pixel
+                // and the wedge edges land sub-pixel precise; at 2 and up they
+                // step in whole multiples of the world pixel, so the edges
+                // stair-step and the layer reads pixelated like the world.
+                float2 cell = _GridCell.xy * max(_PixelScale, 1.0);
+                float2 p = floor(varyings.uv / cell) * cell + 0.5 * cell;
 
                 float2 d = p - _VanishPoint.xy;
                 float dist = length(d);
