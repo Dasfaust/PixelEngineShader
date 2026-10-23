@@ -55,6 +55,14 @@ Shader "PixelEngineLit"
         _InnerOutlineThreshold("Inner Outline Threshold", float) = 0.2
         _InnerOutlineBias("Inner Outline Bias", vector) = (1, 1, 1, 0)
 
+        [Header(Warp Burn)]
+        [Toggle(_WARP_BURN)] _EnableWarpBurn("Enable Warp Burn", float) = 0
+        [HDR] _WarpBurnColor("Burn Colour", color) = (1, 0.45, 0.12, 1)
+        _WarpBurnStrength("Burn Strength", Range(0, 8)) = 1
+        _WarpBurnPower("Facing Falloff Power", Range(1, 32)) = 6
+        _WarpBurnFlickerScale("Flicker Cell Size", float) = 0.25
+        _WarpBurnFlickerSpeed("Flicker Speed", Range(0, 8)) = 1
+
         [Header(Pixel Stabilization)]
         _PixelsPerUnit("Pixels Per Unit", float) = 64
         [Toggle(_STABILIZATION_SNAP_WORLD_POS)] _StabilizationSnapWorldPos("Snap World Position", float) = 0
@@ -117,6 +125,7 @@ Shader "PixelEngineLit"
                 #pragma shader_feature_local_fragment _ _OUTLINES_PERSPECTIVE
                 #pragma shader_feature_local_fragment _OUTLINES_BLENDING_OVERLAY _OUTLINES_BLENDING_OVERWRITE
                 #pragma shader_feature_local_fragment _ _OUTLINES_LIGHTING_UNLIT _OUTLINES_LIGHTING_EMISSIVE
+                #pragma shader_feature_local_fragment _ _WARP_BURN
                 #pragma shader_feature_local_fragment _ _DEBUG_DEPTH _DEBUG_NORMALS _DEBUG_OUTLINES
                 #pragma shader_feature_local_fragment _ _TEXTURE_SAMPLING_TYPE_UPSCALED
                 #pragma shader_feature_local_fragment _ _COLOR_SPACE_CEILAB

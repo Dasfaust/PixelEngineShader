@@ -5,6 +5,7 @@
 #include "ShaderLibrary/Lighting.hlsl"
 #include "ShaderLibrary/Outlines.hlsl"
 #include "ShaderLibrary/BlockInstancing.hlsl"
+#include "WarpBurn.hlsl"
 
 struct Attributes
 {
@@ -181,6 +182,15 @@ float4 Fragment(Interpolators input
         #if defined(_DEBUG_OUTLINES) && (defined(_OUTLINES_LIGHTING_EMISSIVE) || defined(_OUTLINES_LIGHTING_UNLIT))
             return emissedColor;
         #endif
+    #endif
+
+    #if defined(_WARP_BURN)
+        // The burn adds emission on the face that points into the travel, so the hot side is the bow side
+        // and the trailing side keeps its authored look. The term scales linearly with the warp intensity and
+        // answers zero at zero intensity, so a world at rest keeps the picture it had. It sits after the
+        // outline blend, so the plasma reads over the rim.
+        emissedColor.rgb += WarpBurnTerm(lightingInput.normalWS, lightingInput.positionWS,
+            _WarpBurnColor, _WarpBurnStrength, _WarpBurnPower, _WarpBurnFlickerScale, _WarpBurnFlickerSpeed);
     #endif
 
     #if defined(_COLOR_SPACE_CEILAB)

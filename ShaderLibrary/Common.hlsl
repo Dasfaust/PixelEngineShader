@@ -68,6 +68,11 @@ CBUFFER_START(UnityPerMaterial)
     float _InnerOutlineThreshold;
     float4 _InnerOutlineBias;
     float _PixelsPerUnit;
+    float4 _WarpBurnColor;
+    float _WarpBurnStrength;
+    float _WarpBurnPower;
+    float _WarpBurnFlickerScale;
+    float _WarpBurnFlickerSpeed;
 CBUFFER_END
 
 
