@@ -9,6 +9,7 @@ Shader "PixelEngine/Warp Flow"
 
         [Header(Motion)]
         _FlowRate("Flow Rate", Float) = 0.3
+        _FlowPhase("Flow Phase (accumulated cycle, written by the rig)", Float) = 0
         _Accel("Acceleration Exponent (speed ratio e^k across path)", Float) = 2
         _RayPath("Ray Path (UV length)", Float) = 1.2
 
@@ -100,6 +101,7 @@ Shader "PixelEngine/Warp Flow"
                 float _AxialSign;
                 float _RayCount;
                 float _FlowRate;
+                float _FlowPhase;
                 float _Accel;
                 float _RayPath;
                 float _RayWidth;
@@ -258,7 +260,16 @@ Shader "PixelEngine/Warp Flow"
                 // Cycle coordinate: the flow clock, uniform across the screen
                 // and bounded in [0, 1). _Stagger spreads the per-ray phase
                 // over cycle fractions, so rays run their streaks out of step.
-                float tau = frac(_FlowRate * _Time.y + rayPhase * _Stagger);
+                //
+                // _FlowPhase is the clock, accumulated by the rig: it adds the
+                // current flow rate times the frame's elapsed time. A clock
+                // built from _Time.y multiplied by a rate that changes over
+                // time moves by rate*deltaTime + time*deltaRate, so the rate's
+                // own change enters the motion, weighted by how large time has
+                // grown. A falling rate then moves the clock backwards, and the
+                // streaks run in reverse. Advancing by the rate alone keeps the
+                // speed equal to the rate and the direction fixed.
+                float tau = frac(_FlowPhase + rayPhase * _Stagger);
 
                 // Path coordinate along the ray: 0 at the vanishing point,
                 // 1 at the path end. The travel coordinate converts it to the
