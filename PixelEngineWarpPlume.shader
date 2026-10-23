@@ -22,6 +22,7 @@ Shader "PixelEngine/Warp Plume"
         _PlumeFacing("Facing Falloff Power", Range(0.01, 16)) = 1.5
         _PlumeEdge("Wrap End Taper", Range(0.01, 8)) = 1.5
         _PlumeFilaments("Filament Count", Range(1, 64)) = 14
+        _PlumeFilamentsFloor("Filament Floor (the brightness the sheath stands at between pulses)", Range(0, 1)) = 0.65
         _PlumeTurbulence("Filament Length Scale", Range(0.05, 8)) = 1.2
         _PlumeSpeed("Scroll Speed", Range(0, 8)) = 1
         _PlumeCells("Grain Cells", Range(1, 128)) = 28
@@ -61,6 +62,7 @@ Shader "PixelEngine/Warp Plume"
             float _PlumeFacing;
             float _PlumeEdge;
             float _PlumeFilaments;
+            float _PlumeFilamentsFloor;
             float _PlumeTurbulence;
             float _PlumeSpeed;
             float _PlumeCells;
@@ -78,6 +80,7 @@ Shader "PixelEngine/Warp Plume"
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeFacing)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeEdge)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeFilaments)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeFilamentsFloor)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeTurbulence)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeSpeed)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeCells)
@@ -93,6 +96,7 @@ Shader "PixelEngine/Warp Plume"
             #define _PlumeFacing        UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeFacing)
             #define _PlumeEdge          UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeEdge)
             #define _PlumeFilaments     UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeFilaments)
+            #define _PlumeFilamentsFloor UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeFilamentsFloor)
             #define _PlumeTurbulence    UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeTurbulence)
             #define _PlumeSpeed         UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeSpeed)
             #define _PlumeCells         UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeCells)
@@ -177,8 +181,8 @@ Shader "PixelEngine/Warp Plume"
                 float3 travel = PlumeTravelWS(_WarpTravelWS);
                 float facing = pow(saturate(dot(normalize(input.normalWS), travel)), max(_PlumeFacing, 0.01f));
                 float mask = PlumeMask(uv, input.normalWS, intensity, _PlumeFacing, _PlumePower,
-                    _PlumeEdge, _PlumeFilaments, _PlumeTurbulence, _PlumeSpeed, _PlumeCells,
-                    _WarpFlowPhase, travel, facing);
+                    _PlumeEdge, _PlumeFilaments, _PlumeFilamentsFloor, _PlumeTurbulence, _PlumeSpeed,
+                    _PlumeCells, _WarpFlowPhase, travel, facing);
                 float alpha = saturate(_PlumeIntensity * mask);
                 alpha = lerp(alpha, saturate(_PlumeDebugAlpha) * intensity, saturate(_PlumeDebugAlpha));
                 float3 colour = lerp(_PlumeColor.rgb, _PlumeHotColor.rgb,
@@ -250,8 +254,8 @@ Shader "PixelEngine/Warp Plume"
                 float3 travel = PlumeTravelWS(_WarpTravelWS);
                 float facing = pow(saturate(dot(normalize(input.normalWS), travel)), max(_PlumeFacing, 0.01f));
                 float mask = PlumeMask(saturate(input.uv), input.normalWS, intensity,
-                    _PlumeFacing, _PlumePower, _PlumeEdge, _PlumeFilaments, _PlumeTurbulence,
-                    _PlumeSpeed, _PlumeCells, _WarpFlowPhase, travel, facing);
+                    _PlumeFacing, _PlumePower, _PlumeEdge, _PlumeFilaments, _PlumeFilamentsFloor,
+                    _PlumeTurbulence, _PlumeSpeed, _PlumeCells, _WarpFlowPhase, travel, facing);
                 clip(mask * saturate(_PlumeIntensity) - saturate(_PlumeDepthAlphaMin));
 
                 outNormalWS = float4(NormalizeNormalPerPixel(normalize(input.normalWS)), 0.0f);
