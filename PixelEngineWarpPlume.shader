@@ -27,6 +27,13 @@ Shader "PixelEngine/Warp Plume"
         _PlumeSpeed("Scroll Speed", Range(0, 8)) = 1
         _PlumeCells("Grain Cells", Range(1, 128)) = 28
         _PlumeDepthAlphaMin("Prepass Alpha Floor", Range(0, 1)) = 0.04
+        [Header(Transparency and Blending)]
+        [Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend("Source Blend", Float) = 5
+        [Enum(UnityEngine.Rendering.BlendMode)] _DstBlend("Destination Blend", Float) = 10
+        [Toggle] _ZWrite("Depth Write", Float) = 0
+        [Enum(UnityEngine.Rendering.CullMode)] _Cull("Cull Mode", Float) = 0
+        [Toggle(_DOUBLE_SIDED_NORMALS)] _DoubleSided("Double Sided Normals", Float) = 1
+
         [Header(Debug)]
         [Toggle(_DEBUG_PLUME)] _DebugRender("Debug Render (flat colour, reads no warp state)", Float) = 0
         _PlumeDebugIntensity("Debug Intensity Override (0 reads the warp seam)", Range(0, 1)) = 0
@@ -35,6 +42,7 @@ Shader "PixelEngine/Warp Plume"
 
     SubShader
     {
+        Tags { "Queue" = "Transparent" }
         Tags
         {
             "RenderType" = "Opaque"
@@ -112,10 +120,10 @@ Shader "PixelEngine/Warp Plume"
             Name "ForwardLit"
             Tags { "LightMode" = "UniversalForward" }
 
-            Blend SrcAlpha OneMinusSrcAlpha
-            ZWrite Off
+            Blend [_SrcBlend] [_DstBlend]
+            ZWrite [_ZWrite]
             ZTest LEqual
-            Cull Off
+            Cull [_Cull]
 
             HLSLPROGRAM
             #pragma vertex vert
@@ -125,6 +133,7 @@ Shader "PixelEngine/Warp Plume"
             #pragma instancing_options renderinglayer
             #pragma multi_compile _ DOTS_INSTANCING_ON
             #pragma shader_feature_local _DEBUG_PLUME
+            #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS
 
             struct Attributes
             {
@@ -155,9 +164,19 @@ Shader "PixelEngine/Warp Plume"
                 return output;
             }
 
-            float4 frag(Varyings input) : SV_Target
+            float4 frag(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
+
+#if defined(_DOUBLE_SIDED_NORMALS)
+                // Cull Off draws the far side of the arc as well as the near side, and the cap normals
+                // point outward from the arc axis, so the far side carries a normal that points away
+                // from the eye. The facing term reads that normal, so without the flip the far side
+                // dims the way a wrap does and the sheath reads asymmetric as the camera swings behind.
+                float3 normalWS = isFrontFace ? input.normalWS : -input.normalWS;
+#else
+                float3 normalWS = input.normalWS;
+#endif
 
 #if defined(_DEBUG_PLUME)
                 // The debug answer. It reads no warp state, no travel, no normal, and no uv, so a mesh
@@ -179,8 +198,8 @@ Shader "PixelEngine/Warp Plume"
                 float2 uv = saturate(input.uv);
 
                 float3 travel = PlumeTravelWS(_WarpTravelWS);
-                float facing = pow(saturate(dot(normalize(input.normalWS), travel)), max(_PlumeFacing, 0.01f));
-                float mask = PlumeMask(uv, input.normalWS, intensity, _PlumeFacing, _PlumePower,
+                float facing = pow(saturate(dot(normalize(normalWS), travel)), max(_PlumeFacing, 0.01f));
+                float mask = PlumeMask(uv, normalWS, intensity, _PlumeFacing, _PlumePower,
                     _PlumeEdge, _PlumeFilaments, _PlumeFilamentsFloor, _PlumeTurbulence, _PlumeSpeed,
                     _PlumeCells, _WarpFlowPhase, travel, facing);
                 float alpha = saturate(_PlumeIntensity * mask);
@@ -197,8 +216,8 @@ Shader "PixelEngine/Warp Plume"
             Name "DepthNormals"
             Tags { "LightMode" = "DepthNormals" }
 
-            ZWrite On
-            Cull Off
+            ZWrite [_ZWrite]
+            Cull [_Cull]
 
             HLSLPROGRAM
             #pragma vertex DepthNormalsVertex
@@ -208,6 +227,7 @@ Shader "PixelEngine/Warp Plume"
             #pragma instancing_options renderinglayer
             #pragma multi_compile _ DOTS_INSTANCING_ON
             #pragma shader_feature_local _DEBUG_PLUME
+            #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS
 
             struct Attributes
             {
@@ -236,14 +256,20 @@ Shader "PixelEngine/Warp Plume"
                 return output;
             }
 
-            void DepthNormalsFragment(Interpolators input, out float4 outNormalWS : SV_Target0)
+            void DepthNormalsFragment(Interpolators input, bool isFrontFace : SV_IsFrontFace, out float4 outNormalWS : SV_Target0)
             {
                 UNITY_SETUP_INSTANCE_ID(input);
+
+#if defined(_DOUBLE_SIDED_NORMALS)
+                float3 normalWS = isFrontFace ? input.normalWS : -input.normalWS;
+#else
+                float3 normalWS = input.normalWS;
+#endif
 
 #if defined(_DEBUG_PLUME)
                 // The debug answer writes the normal for the whole footprint and clips nothing, so the
                 // prepass and the forward pass agree on what the debug run covers.
-                outNormalWS = float4(NormalizeNormalPerPixel(normalize(input.normalWS)), 0.0f);
+                outNormalWS = float4(NormalizeNormalPerPixel(normalize(normalWS)), 0.0f);
                 return;
 #endif
 
@@ -252,13 +278,13 @@ Shader "PixelEngine/Warp Plume"
                 // primed main pass resolves what sits behind against depth the plume never lights.
                 float intensity = PlumeIntensityNow(_PlumeDebugIntensity);
                 float3 travel = PlumeTravelWS(_WarpTravelWS);
-                float facing = pow(saturate(dot(normalize(input.normalWS), travel)), max(_PlumeFacing, 0.01f));
-                float mask = PlumeMask(saturate(input.uv), input.normalWS, intensity,
+                float facing = pow(saturate(dot(normalize(normalWS), travel)), max(_PlumeFacing, 0.01f));
+                float mask = PlumeMask(saturate(input.uv), normalWS, intensity,
                     _PlumeFacing, _PlumePower, _PlumeEdge, _PlumeFilaments, _PlumeFilamentsFloor,
                     _PlumeTurbulence, _PlumeSpeed, _PlumeCells, _WarpFlowPhase, travel, facing);
                 clip(mask * saturate(_PlumeIntensity) - saturate(_PlumeDepthAlphaMin));
 
-                outNormalWS = float4(NormalizeNormalPerPixel(normalize(input.normalWS)), 0.0f);
+                outNormalWS = float4(NormalizeNormalPerPixel(normalize(normalWS)), 0.0f);
             }
             ENDHLSL
         }
