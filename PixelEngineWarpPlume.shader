@@ -34,6 +34,7 @@ Shader "PixelEngine/Warp Plume"
         [Enum(UnityEngine.Rendering.BlendMode)] _DstBlend("Destination Blend", Float) = 10
         [Toggle] _ZWrite("Depth Write", Float) = 0
         [Enum(UnityEngine.Rendering.CullMode)] _Cull("Cull Mode", Float) = 0
+        [Toggle(_PREMULTIPLY_ALPHA)] _Premultiply("Premultiply Alpha (pairs with One / OneMinusSrcAlpha)", Float) = 1
         [Toggle(_DOUBLE_SIDED_NORMALS)] _DoubleSided("Double Sided Normals", Float) = 1
 
         [Header(Debug)]
@@ -133,6 +134,7 @@ Shader "PixelEngine/Warp Plume"
             #pragma multi_compile _ DOTS_INSTANCING_ON
             #pragma shader_feature_local _DEBUG_PLUME
             #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS
+            #pragma shader_feature_local_fragment _PREMULTIPLY_ALPHA
 
             struct Attributes
             {
@@ -216,7 +218,17 @@ Shader "PixelEngine/Warp Plume"
 
                 float3 colour = lerp(_PlumeColor.rgb, _PlumeHotColor.rgb,
                     pow(saturate(1.0f - uv.y), 3.0f) * facing);
+
+#if defined(_PREMULTIPLY_ALPHA)
+                // Premultiplied: the colour arrives carrying its alpha. The blend pair One /
+                // OneMinusSrcAlpha then adds the plasma's brightness where it covers and keeps the
+                // background where it does not, so a thin pixel is a dim plasma and not a window onto
+                // the scene. Straight alpha, the other branch, multiplies the source by alpha at the
+                // blend, which is the shape that dims an emissive surface toward its background.
+                return float4(colour * alpha, alpha);
+#else
                 return float4(colour, alpha);
+#endif
             }
             ENDHLSL
         }
