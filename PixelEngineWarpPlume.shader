@@ -1,57 +1,129 @@
-// The bow plume: the plasma sheath carried in front of a platform moving through the warp.
+// The bow plume: the plasma sheath that wraps the front of a platform moving through the warp.
 //
-// One plate per platform, built by WarpBowPlume. The plate is camera-facing: the vertex builds it around
-// the object's own centre in view space, so it reads the same in the ortho pixel camera and in
-// perspective mode, and the object's transform carries the authored width, tail length, and placement.
+// The geometry is the cap WarpPlumeMath builds: an arc across the front, authored wider than a half circle
+// so the ends wrap past the sides, with a ribbon running downstream from the arc. This shader lights it.
 //
-// The plate draws additive with ZTest Always. The plate sits on the far side of the platform while the
-// platform travels away from the camera, so a depth test the platform can win would hide the sheath
-// behind the hull it is burning. Additive over the hull is what a re-entry looks like from this side.
+// Brightness comes from three authored terms multiplied together. The facing term is the cap normal against
+// the travel direction, so the front of the cap is the hot band and the wrapped ends go dim, which is what
+// makes the sheath read as a curve and not as a decal. The downstream term spends the sheath along the tail.
+// The edge term tapers the wrap ends, so the ends that reach behind the sides do not stop on a hard line.
+//
+// The plate draws additive with ZTest Always. A platform that travels away from the camera puts its sheath
+// behind the hull in depth, and a depth test the hull can win would hide the burn.
 Shader "PixelEngine/Warp Plume"
 {
     Properties
     {
         [Header(Plume Look)]
-        [HDR] _PlumeColor("Plume Colour", color) = (1, 0.4, 0.1, 1)
-        [HDR] _PlumeHotColor("Nose Hot Colour", color) = (1, 0.92, 0.75, 1)
-        _PlumeIntensity("Plume Intensity", Range(0, 8)) = 1
-        _PlumePower("Nose Falloff Power", Range(0.01, 8)) = 2
-        _PlumeFilaments("Filament Count", Range(1, 64)) = 12
-        _PlumeTurbulence("Filament Length Scale", Range(0.05, 8)) = 1.5
+        [HDR] _PlumeColor("Plume Colour", color) = (1.6, 0.34, 0.08, 1)
+        [HDR] _PlumeHotColor("Front Hot Colour", color) = (1.4, 0.78, 0.3, 1)
+        _PlumeIntensity("Plume Intensity", Range(0, 8)) = 2.5
+        _PlumePower("Downstream Falloff Power", Range(0.01, 8)) = 1.2
+        _PlumeFacing("Facing Falloff Power", Range(0.01, 16)) = 1.5
+        _PlumeEdge("Wrap End Taper", Range(0.01, 8)) = 1.5
+        _PlumeFilaments("Filament Count", Range(1, 64)) = 14
+        _PlumeTurbulence("Filament Length Scale", Range(0.05, 8)) = 1.2
         _PlumeSpeed("Scroll Speed", Range(0, 8)) = 1
-        _PlumeCells("Grain Cells", Range(1, 128)) = 24
+        _PlumeCells("Grain Cells", Range(1, 128)) = 28
+        _PlumeDepthAlphaMin("Prepass Alpha Floor", Range(0, 1)) = 0.04
+        [Header(Debug)]
+        _PlumeDebugIntensity("Debug Intensity Override (0 reads the warp seam)", Range(0, 1)) = 0
+        [HideInInspector] _PlumeDebugAlpha("Debug Alpha Override (0 keeps the authored mask)", Range(0, 1)) = 0
     }
 
     SubShader
     {
         Tags
         {
-            "RenderType" = "Transparent"
-            "Queue" = "Transparent"
+            "RenderType" = "Opaque"
             "RenderPipeline" = "UniversalPipeline"
         }
 
+        HLSLINCLUDE
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+        // The warp rig publishes these three: the intensity the pass runs on, the clock the filaments
+        // scroll on, and the direction of travel. They are globals and not per-material constants, so
+        // they stay outside the constant block. They are declared before the mask include, because the
+        // mask reads the intensity and HLSL binds a declaration before the point of use.
+        float4 _WarpTravelWS;
+        float _WarpIntensity;
+        float _WarpFlowPhase;
+
+        #include "./ShaderLibrary/PlumeMask.hlsl"
+
+        CBUFFER_START(UnityPerMaterial)
+            float4 _PlumeColor;
+            float4 _PlumeHotColor;
+            float _PlumeIntensity;
+            float _PlumePower;
+            float _PlumeFacing;
+            float _PlumeEdge;
+            float _PlumeFilaments;
+            float _PlumeTurbulence;
+            float _PlumeSpeed;
+            float _PlumeCells;
+            float _PlumeDepthAlphaMin;
+            float _PlumeDebugIntensity;
+            float _PlumeDebugAlpha;
+        CBUFFER_END
+
+        #ifdef UNITY_DOTS_INSTANCING_ENABLED
+            UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
+                UNITY_DOTS_INSTANCED_PROP(float4, _PlumeColor)
+                UNITY_DOTS_INSTANCED_PROP(float4, _PlumeHotColor)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeIntensity)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumePower)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeFacing)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeEdge)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeFilaments)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeTurbulence)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeSpeed)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeCells)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeDepthAlphaMin)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeDebugIntensity)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeDebugAlpha)
+            UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
+
+            #define _PlumeColor         UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _PlumeColor)
+            #define _PlumeHotColor      UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _PlumeHotColor)
+            #define _PlumeIntensity     UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeIntensity)
+            #define _PlumePower         UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumePower)
+            #define _PlumeFacing        UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeFacing)
+            #define _PlumeEdge          UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeEdge)
+            #define _PlumeFilaments     UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeFilaments)
+            #define _PlumeTurbulence    UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeTurbulence)
+            #define _PlumeSpeed         UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeSpeed)
+            #define _PlumeCells         UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeCells)
+            #define _PlumeDepthAlphaMin UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeDepthAlphaMin)
+            #define _PlumeDebugIntensity UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeDebugIntensity)
+            #define _PlumeDebugAlpha    UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeDebugAlpha)
+        #endif
+
+        ENDHLSL
+
         Pass
         {
-            Name "WarpPlume"
+            Name "ForwardLit"
             Tags { "LightMode" = "UniversalForward" }
 
-            Blend SrcAlpha One
+            Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
-            ZTest Always
+            ZTest LEqual
             Cull Off
 
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma target 4.5
             #pragma multi_compile_instancing
+            #pragma instancing_options renderinglayer
             #pragma multi_compile _ DOTS_INSTANCING_ON
-
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             struct Attributes
             {
                 float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
                 float2 uv : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
@@ -59,36 +131,10 @@ Shader "PixelEngine/Warp Plume"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float2 uv : TEXCOORD0;
+                float3 normalWS : TEXCOORD0;
+                float2 uv : TEXCOORD1;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
-
-            CBUFFER_START(UnityPerMaterial)
-                float4 _PlumeColor;
-                float4 _PlumeHotColor;
-                float _PlumeIntensity;
-                float _PlumePower;
-                float _PlumeFilaments;
-                float _PlumeTurbulence;
-                float _PlumeSpeed;
-                float _PlumeCells;
-            CBUFFER_END
-
-            // The warp rig writes these three: the same intensity the streak layer runs on, the same clock
-            // the streaks scroll on, and the direction of travel. The plate reads the intensity linearly,
-            // so the sheath grows with the warp and nothing else. The travel direction is read by the game
-            // side that places the plate; it is declared here so the shared block reads complete.
-            float4 _WarpTravelWS;
-            float _WarpIntensity;
-            float _WarpFlowPhase;
-
-            float PlumeHash(float2 seed)
-            {
-                float2 p = frac(seed * 0.1031);
-                p += dot(p, p.yx + 33.33);
-                return frac((p.x + p.y) * p.y);
-            }
-
 
             Varyings vert(Attributes input)
             {
@@ -96,19 +142,9 @@ Shader "PixelEngine/Warp Plume"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
 
-                // A camera-facing plate: the authored offsets run along the camera's own right and up axes
-                // in world space, anchored at the object centre, so the plate turns with the camera and the
-                // object's scale is the plate's size. A mesh built in world axes would tilt off the view as
-                // the camera pitches.
-                float3 centreWS = TransformObjectToWorld(float3(0.0f, 0.0f, 0.0f));
-                float scaleX = length(float3(UNITY_MATRIX_M[0][0], UNITY_MATRIX_M[1][0], UNITY_MATRIX_M[2][0]));
-                float scaleY = length(float3(UNITY_MATRIX_M[0][1], UNITY_MATRIX_M[1][1], UNITY_MATRIX_M[2][1]));
-                float3 rightWS = normalize(UNITY_MATRIX_V[0].xyz);
-                float3 upWS = normalize(UNITY_MATRIX_V[1].xyz);
-                float3 worldPos = centreWS
-                    + rightWS * (input.positionOS.x * scaleX)
-                    + upWS * (input.positionOS.y * scaleY);
-                output.positionCS = TransformWorldToHClip(worldPos);
+                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionCS = TransformWorldToHClip(positionWS);
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
                 output.uv = input.uv;
                 return output;
             }
@@ -117,37 +153,89 @@ Shader "PixelEngine/Warp Plume"
             {
                 UNITY_SETUP_INSTANCE_ID(input);
 
-                float intensity = saturate(_WarpIntensity);
+                // The intensity is the warp seam's number, so the sheath and the streaks run on one value.
+                // PlumeIntensityNow is the measurement override: authored zero, which is the shipped state.
+                float intensity = PlumeIntensityNow(_PlumeDebugIntensity);
                 if (intensity <= 0.0f)
                 {
                     return float4(0.0f, 0.0f, 0.0f, 0.0f);
                 }
 
                 float2 uv = saturate(input.uv);
-                float along = uv.y;
-                float across = uv.x * 2.0f - 1.0f;
 
-                // Bright at the nose, spent at the tail. The nose is the surface facing the travel, so the
-                // nose is where the sheath lights hottest.
-                float nose = pow(saturate(1.0f - along), max(_PlumePower, 0.01f));
-                float side = pow(saturate(1.0f - abs(across)), 2.0f);
-
-                // Filaments: one hash cell across the width, scrolled along the length on the warp clock,
-                // so the sheath flows at the streak speed.
-                float filamentCell = floor(uv.x * max(_PlumeFilaments, 1.0f));
-                float scroll = frac(along * max(_PlumeTurbulence, 0.01f)
-                    + _WarpFlowPhase * max(_PlumeSpeed, 0.0f)
-                    + PlumeHash(float2(filamentCell, 3.71f)) * 7.13f);
-                float pulse = pow(saturate(sin(scroll * 6.2831853f) * 0.5f + 0.5f), 3.0f);
-                float filaments = 0.35f + 0.65f * pulse;
-
-                // Grain on the plate's own grid, so the sheath breaks into cells at the pixel scale.
-                float2 grainCell = floor(float2(uv.x, uv.y) * max(_PlumeCells, 1.0f));
-                float grain = 0.7f + 0.3f * PlumeHash(grainCell + floor(_WarpFlowPhase * 2.0f));
-
-                float alpha = saturate(intensity * _PlumeIntensity * nose * side * filaments * grain);
-                float3 colour = lerp(_PlumeColor.rgb, _PlumeHotColor.rgb, pow(saturate(1.0f - along), 3.0f));
+                float3 travel = PlumeTravelWS(_WarpTravelWS);
+                float facing = pow(saturate(dot(normalize(input.normalWS), travel)), max(_PlumeFacing, 0.01f));
+                float mask = PlumeMask(uv, input.normalWS, intensity, _PlumeFacing, _PlumePower,
+                    _PlumeEdge, _PlumeFilaments, _PlumeTurbulence, _PlumeSpeed, _PlumeCells,
+                    _WarpFlowPhase, travel, facing);
+                float alpha = saturate(_PlumeIntensity * mask);
+                alpha = lerp(alpha, saturate(_PlumeDebugAlpha) * intensity, saturate(_PlumeDebugAlpha));
+                float3 colour = lerp(_PlumeColor.rgb, _PlumeHotColor.rgb,
+                    pow(saturate(1.0f - uv.y), 3.0f) * facing);
                 return float4(colour, alpha);
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "DepthNormals"
+            Tags { "LightMode" = "DepthNormals" }
+
+            ZWrite On
+            Cull Off
+
+            HLSLPROGRAM
+            #pragma vertex DepthNormalsVertex
+            #pragma fragment DepthNormalsFragment
+            #pragma target 4.5
+            #pragma multi_compile_instancing
+            #pragma instancing_options renderinglayer
+            #pragma multi_compile _ DOTS_INSTANCING_ON
+
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct Interpolators
+            {
+                float4 positionCS : SV_POSITION;
+                float3 normalWS : TEXCOORD0;
+                float2 uv : TEXCOORD1;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            Interpolators DepthNormalsVertex(Attributes input)
+            {
+                Interpolators output = (Interpolators)0;
+                UNITY_SETUP_INSTANCE_ID(input);
+                UNITY_TRANSFER_INSTANCE_ID(input, output);
+                output.positionCS = TransformWorldToHClip(TransformObjectToWorld(input.positionOS.xyz));
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.uv = input.uv;
+                return output;
+            }
+
+            void DepthNormalsFragment(Interpolators input, out float4 outNormalWS : SV_Target0)
+            {
+                UNITY_SETUP_INSTANCE_ID(input);
+
+                // The clip reads the intensity the forward pass reads. A prepass computed at a fixed
+                // intensity passes the clip over the whole footprint, and the prepass writes depth, so the
+                // primed main pass resolves what sits behind against depth the plume never lights.
+                float intensity = PlumeIntensityNow(_PlumeDebugIntensity);
+                float3 travel = PlumeTravelWS(_WarpTravelWS);
+                float facing = pow(saturate(dot(normalize(input.normalWS), travel)), max(_PlumeFacing, 0.01f));
+                float mask = PlumeMask(saturate(input.uv), input.normalWS, intensity,
+                    _PlumeFacing, _PlumePower, _PlumeEdge, _PlumeFilaments, _PlumeTurbulence,
+                    _PlumeSpeed, _PlumeCells, _WarpFlowPhase, travel, facing);
+                clip(mask * saturate(_PlumeIntensity) - saturate(_PlumeDepthAlphaMin));
+
+                outNormalWS = float4(NormalizeNormalPerPixel(normalize(input.normalWS)), 0.0f);
             }
             ENDHLSL
         }
