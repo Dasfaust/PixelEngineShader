@@ -27,6 +27,7 @@ Shader "PixelEngine/Warp Plume"
         _PlumeCells("Grain Cells", Range(1, 128)) = 28
         _PlumeDepthAlphaMin("Prepass Alpha Floor", Range(0, 1)) = 0.04
         [Header(Debug)]
+        [Toggle(_DEBUG_PLUME)] _DebugRender("Debug Render (flat colour, reads no warp state)", Float) = 0
         _PlumeDebugIntensity("Debug Intensity Override (0 reads the warp seam)", Range(0, 1)) = 0
         [HideInInspector] _PlumeDebugAlpha("Debug Alpha Override (0 keeps the authored mask)", Range(0, 1)) = 0
     }
@@ -119,6 +120,7 @@ Shader "PixelEngine/Warp Plume"
             #pragma multi_compile_instancing
             #pragma instancing_options renderinglayer
             #pragma multi_compile _ DOTS_INSTANCING_ON
+            #pragma shader_feature_local _DEBUG_PLUME
 
             struct Attributes
             {
@@ -152,6 +154,15 @@ Shader "PixelEngine/Warp Plume"
             float4 frag(Varyings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
+
+#if defined(_DEBUG_PLUME)
+                // The debug answer. It reads no warp state, no travel, no normal, and no uv, so a mesh
+                // with this material either draws a solid shape or does not draw at all, and nothing in
+                // the warp rig can be the reason. A scene view and a play mode frame answer the same
+                // question from the same material, so the split between the draw path and the rig is a
+                // measurement and not a guess.
+                return float4(saturate(_PlumeColor.rgb) * 2.0, 1.0);
+#endif
 
                 // The intensity is the warp seam's number, so the sheath and the streaks run on one value.
                 // PlumeIntensityNow is the measurement override: authored zero, which is the shipped state.
@@ -192,6 +203,7 @@ Shader "PixelEngine/Warp Plume"
             #pragma multi_compile_instancing
             #pragma instancing_options renderinglayer
             #pragma multi_compile _ DOTS_INSTANCING_ON
+            #pragma shader_feature_local _DEBUG_PLUME
 
             struct Attributes
             {
@@ -223,6 +235,13 @@ Shader "PixelEngine/Warp Plume"
             void DepthNormalsFragment(Interpolators input, out float4 outNormalWS : SV_Target0)
             {
                 UNITY_SETUP_INSTANCE_ID(input);
+
+#if defined(_DEBUG_PLUME)
+                // The debug answer writes the normal for the whole footprint and clips nothing, so the
+                // prepass and the forward pass agree on what the debug run covers.
+                outNormalWS = float4(NormalizeNormalPerPixel(normalize(input.normalWS)), 0.0f);
+                return;
+#endif
 
                 // The clip reads the intensity the forward pass reads. A prepass computed at a fixed
                 // intensity passes the clip over the whole footprint, and the prepass writes depth, so the
