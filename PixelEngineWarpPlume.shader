@@ -23,6 +23,7 @@ Shader "PixelEngine/Warp Plume"
         _PlumeIntensity("Plume Intensity", Range(0, 8)) = 2.5
         _PlumePower("Downstream Falloff Power", Range(0.01, 8)) = 1.2
         _PlumeFacing("Facing Falloff Power", Range(0.01, 16)) = 1.5
+        _PlumeFacingFloor("Facing Floor (the brightness a surface keeps at a right angle to travel and eye)", Range(0, 1)) = 0.35
         _PlumeEdge("Wrap End Taper", Range(0.01, 8)) = 1.5
         _PlumeFilaments("Filament Count", Range(1, 64)) = 14
         _PlumeFilamentsFloor("Filament Floor (the brightness the sheath stands at between pulses)", Range(0, 1)) = 0.65
@@ -72,6 +73,7 @@ Shader "PixelEngine/Warp Plume"
             float _PlumeIntensity;
             float _PlumePower;
             float _PlumeFacing;
+            float _PlumeFacingFloor;
             float _PlumeEdge;
             float _PlumeFilaments;
             float _PlumeFilamentsFloor;
@@ -89,6 +91,7 @@ Shader "PixelEngine/Warp Plume"
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeIntensity)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumePower)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeFacing)
+                UNITY_DOTS_INSTANCED_PROP(float, _PlumeFacingFloor)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeEdge)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeFilaments)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeFilamentsFloor)
@@ -104,6 +107,7 @@ Shader "PixelEngine/Warp Plume"
             #define _PlumeIntensity     UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeIntensity)
             #define _PlumePower         UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumePower)
             #define _PlumeFacing        UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeFacing)
+            #define _PlumeFacingFloor   UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeFacingFloor)
             #define _PlumeEdge          UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeEdge)
             #define _PlumeFilaments     UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeFilaments)
             #define _PlumeFilamentsFloor UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeFilamentsFloor)
@@ -150,6 +154,7 @@ Shader "PixelEngine/Warp Plume"
                 float4 positionCS : SV_POSITION;
                 float3 normalWS : TEXCOORD0;
                 float2 uv : TEXCOORD1;
+                float3 positionWS : TEXCOORD2;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -162,6 +167,7 @@ Shader "PixelEngine/Warp Plume"
                 float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
                 output.positionCS = TransformWorldToHClip(positionWS);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionWS = positionWS;
                 output.uv = input.uv;
                 return output;
             }
@@ -200,7 +206,17 @@ Shader "PixelEngine/Warp Plume"
                 float2 uv = saturate(input.uv);
 
                 float3 travel = PlumeTravelWS(_WarpTravelWS);
-                float facing = pow(saturate(dot(normalize(normalWS), travel)), max(_PlumeFacing, 0.01f));
+                // The travel direction alone kills the outer band of a sweep authored wider than a half
+                // circle: a cap normal at a right angle to the travel answers zero, and a normal past that
+                // answers zero after saturation. The measured cost on the authored 220 degree sweep is the
+                // outer 44 degrees on each side, which is 40 percent of the arc drawn at zero alpha, and
+                // that zero is computed inside the surface, so no depth test setting brings those pixels
+                // back. A surface is lit by the travel, which is the hot bow band, or by the eye, which is
+                // the part of the sheath the camera is looking at, and the floor is what a surface keeps at
+                // a right angle to both.
+                float3 viewDirectionWS = normalize(GetWorldSpaceViewDir(input.positionWS));
+                float facingLit = max(saturate(dot(normalize(normalWS), travel)), saturate(dot(viewDirectionWS, normalize(normalWS))));
+                float facing = lerp(saturate(_PlumeFacingFloor), 1.0f, pow(facingLit, max(_PlumeFacing, 0.01f)));
                 float mask = PlumeMask(uv, normalWS, intensity, _PlumeFacing, _PlumePower,
                     _PlumeEdge, _PlumeFilaments, _PlumeFilamentsFloor, _PlumeTurbulence, _PlumeSpeed,
                     _PlumeCells, _WarpFlowPhase, travel, facing);
