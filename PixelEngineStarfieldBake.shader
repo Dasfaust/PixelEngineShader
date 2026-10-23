@@ -28,7 +28,7 @@ Shader "PixelEngine/Starfield Bake"
         _FieldDims("Bake target size (texels)", vector) = (964, 544, 0, 0)
 
         [Header(Seed)]
-        _Seed("Field seed", float) = 1
+        _Seed("Field seed", int) = 1
 
         [Header(Deep space)]
         _DeepTop("Deep color (view top)", Color) = (0.043, 0.016, 0.078, 1)
@@ -93,7 +93,7 @@ Shader "PixelEngine/Starfield Bake"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _FieldDims;
-                float _Seed;
+                int _Seed;
                 float4 _DeepTop;
                 float4 _DeepBottom;
                 float _GradientBands;
@@ -147,31 +147,58 @@ Shader "PixelEngine/Starfield Bake"
                 return floor(value * steps) / steps;
             }
 
-            float Hash01(float2 seed)
+            // An exact 32-bit integer hash. Every step is unsigned integer math, so the answer carries
+            // the same quality at index 3 and at index 999999, and it does not depend on the size of the
+            // number it reads.
+            //
+            // The older hash multiplied the input by large constants and kept the fractional part. A
+            // 32-bit float carries 24 bits of mantissa, so a product near 1.6e6 has a step of about 0.1
+            // and a product past 2^24 has a step of 1 or more: the fractional part a bake reads from a
+            // big seed is coarse, many cells answer the same value, and the star field lands on its
+            // own lattice. That is the grid pattern a high seed shows, and the sizes and colors that
+            // read the same degenerate roll come out in a few steps. The integer hash has no such
+            // budget: 32-bit integer multiplication wraps exactly, and the mixing spreads every bit.
+            uint UintHash(uint x, uint y, uint z)
             {
-                float3 p = frac(float3(seed.xy, seed.x + seed.y) * float3(443.897, 441.423, 437.195));
-                p += dot(p, p.yzx + 19.19);
-                return frac((p.x + p.y) * p.z);
+                uint p = x * 1013904223u + y * 1554868939u + z * 1430517047u;
+                p = p ^ (p >> 16);
+                p *= 2246822507u;
+                p = p ^ (p >> 13);
+                p *= 3266489909u;
+                p = p ^ (p >> 16);
+                return p;
             }
 
-            // Positive modulo, so a negative lattice index reads the same cell as the matching
-            // positive one. Count is the cell count across the bake target on each axis, so the
-            // noise period is the bake target's own width and height.
-            float2 WrapLattice(float2 lattice, float2 count)
+            // The hash in [0, 1). The 32 bits are read as the top bits of a float in [0, 1), so the
+            // value is uniform and the low bits a later multiply by 13.7 can use are real bits.
+            float Hash01(int2 lattice, int salt)
             {
-                return lattice - floor(lattice / count) * count;
+                uint h = UintHash((uint)lattice.x, (uint)lattice.y, (uint)salt);
+                return h * (1.0 / 4294967296.0);
             }
 
-            // Value noise on a wrapping integer lattice, in [0, 1].
-            float ValueNoise(float2 p, float2 count)
+            // Positive modulo on whole numbers, so a negative lattice index reads the same cell as the
+            // matching positive one. Count is the cell count across the bake target on each axis, so the
+            // noise period is the bake target's own width and height. The wrap is integer, so a shift by
+            // the seed — which runs to 999999 — costs exact arithmetic and no float rounding.
+            int2 WrapLattice(int2 lattice, int2 count)
             {
-                float2 lattice = floor(p);
+                return ((lattice % count) + count) % count;
+            }
+
+            // Value noise on a wrapping integer lattice, in [0, 1]. The octave index is the hash salt,
+            // so the four octaves never read the same hash cell.
+            float ValueNoise(float2 p, float2 countF, int octave)
+            {
+                int2 count = (int2)countF;
+                int2 lattice = (int2)floor(p);
                 float2 f = frac(p);
                 f = f * f * (3.0 - 2.0 * f);
-                float a = Hash01(WrapLattice(lattice, count));
-                float b = Hash01(WrapLattice(lattice + float2(1, 0), count));
-                float c = Hash01(WrapLattice(lattice + float2(0, 1), count));
-                float d = Hash01(WrapLattice(lattice + float2(1, 1), count));
+                int salt = octave * 7919;
+                float a = Hash01(WrapLattice(lattice, count), salt);
+                float b = Hash01(WrapLattice(lattice + int2(1, 0), count), salt);
+                float c = Hash01(WrapLattice(lattice + int2(0, 1), count), salt);
+                float d = Hash01(WrapLattice(lattice + int2(1, 1), count), salt);
                 return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
             }
 
@@ -192,13 +219,13 @@ Shader "PixelEngine/Starfield Bake"
                 float2 origin3 = float2(4.19, 1.37);
 
                 float2 count = CountFor(_NebulaScale);
-                float sum = 0.5334 * ValueNoise(coord * (count / _FieldDims.xy) + origin0, count);
+                float sum = 0.5334 * ValueNoise(coord * (count / _FieldDims.xy) + origin0, count, 0);
                 count = CountFor(_NebulaScale * 2.0);
-                sum += 0.2667 * ValueNoise(coord * (count / _FieldDims.xy) + origin1, count);
+                sum += 0.2667 * ValueNoise(coord * (count / _FieldDims.xy) + origin1, count, 1);
                 count = CountFor(_NebulaScale * 4.0);
-                sum += 0.1333 * ValueNoise(coord * (count / _FieldDims.xy) + origin2, count);
+                sum += 0.1333 * ValueNoise(coord * (count / _FieldDims.xy) + origin2, count, 2);
                 count = CountFor(_NebulaScale * 8.0);
-                sum += 0.0667 * ValueNoise(coord * (count / _FieldDims.xy) + origin3, count);
+                sum += 0.0667 * ValueNoise(coord * (count / _FieldDims.xy) + origin3, count, 3);
                 return sum;
             }
 
@@ -206,23 +233,33 @@ Shader "PixelEngine/Starfield Bake"
             // most one dot, placed inside the cell by a hash, lit through the band step. Size and
             // light rise together in the same quantized steps, so the few large dots are the bright
             // ones and the mass of small dots stays dim.
-            float3 StarLayer(float2 field, float cell, float densityFactor, float brightness, float seed)
+            float3 StarLayer(float2 field, float cell, float densityFactor, float brightness, int layer)
             {
-                float2 count = max(round(_FieldDims.xy / cell), float2(2.0, 2.0));
-                float2 cellSize = _FieldDims.xy / count;
-                float2 p = field / cellSize + seed;
-                float2 lattice = floor(p);
+                float2 countF = max(round(_FieldDims.xy / cell), float2(2.0, 2.0));
+                int2 count = (int2)countF;
+                float2 cellSize = _FieldDims.xy / countF;
+                float2 p = field / cellSize;
+                int2 insideLattice = (int2)floor(p);
                 float2 inside = frac(p);
 
-                float roll = Hash01(WrapLattice(lattice, count) + seed * 0.37);
+                // The seed shifts every layer's lattice by whole cells, and the shift wraps inside
+                // WrapLattice. Whole-number arithmetic keeps the shift exact at the top of the seed
+                // range, where the old float shift lost its fine bits and the layer fell onto its grid.
+                int2 lattice = WrapLattice(insideLattice + _Seed * (layer + 1), count);
+                int salt = _Seed * 31 + layer * 1013904223;
+
+                // Size, warmth, and the dot's center all read the same roll, the way the layer is
+                // authored: the few large dots are the bright ones, and their color and size move
+                // together. The roll now comes from the integer hash, so the steps it carries stay
+                // real steps at every seed.
+                float roll = Hash01(lattice, salt);
                 float present = step(1.0 - _StarDensity * densityFactor, roll);
 
                 float sizeRoll = saturate(frac(roll * 13.7) * 1.6 - 0.6);
                 float sizeFactor = 1.0 + (_StarSizeSpread - 1.0) * Bands(sizeRoll, 3.0);
                 float size = _StarSize * sizeFactor;
 
-                float2 center = float2(Hash01(WrapLattice(lattice, count) + seed * 3.11),
-                                       Hash01(WrapLattice(lattice, count) - seed * 7.77));
+                float2 center = float2(Hash01(lattice, salt + 7), Hash01(lattice, salt + 13));
                 float distance = length((inside - center) * cellSize);
                 // The falloff spans one field pixel, so a lit dot carries a core value and at most
                 // one dim neighbour: a dot never grows a soft halo around itself.
@@ -268,13 +305,13 @@ Shader "PixelEngine/Starfield Bake"
                 float along = dot(centered, bandAxis);
 
                 float2 warpSource = (centered + 17.3) * (CountFor(_NebulaScale * 0.35) / fieldDims);
-                float2 warp = (float2(ValueNoise(warpSource, CountFor(_NebulaScale * 0.35)),
-                                      ValueNoise(warpSource + 11.7, CountFor(_NebulaScale * 0.35))) - 0.5)
+                float2 warp = (float2(ValueNoise(warpSource, CountFor(_NebulaScale * 0.35), 4),
+                                      ValueNoise(warpSource + 11.7, CountFor(_NebulaScale * 0.35), 5)) - 0.5)
                     * _NebulaWarp;
 
                 float2 bandCount = CountFor(_NebulaScale * 0.2);
                 float bandWidth = _NebulaWidth * (1.0 + _NebulaWarp * 0.02 *
-                    (ValueNoise(centered * (bandCount / fieldDims) - 5.1, bandCount) - 0.5));
+                    (ValueNoise(centered * (bandCount / fieldDims) - 5.1, bandCount, 6) - 0.5));
                 float bandMask = saturate(1.0 - abs(across) / max(bandWidth, 1.0));
                 bandMask = bandMask * bandMask * (3.0 - 2.0 * bandMask);
 
@@ -292,7 +329,7 @@ Shader "PixelEngine/Starfield Bake"
                 float2 laneExtent = float2(abs(fieldDims.x * bandAxis.x) + abs(fieldDims.y * bandAxis.y),
                                            abs(fieldDims.x * bandNormal.x) + abs(fieldDims.y * bandNormal.y));
                 float2 laneCount = max(round(laneExtent * _LaneScale * float2(0.5, 1.0)), float2(2.0, 2.0));
-                float laneNoise = ValueNoise(float2(along, across) * (laneCount / laneExtent), laneCount);
+                float laneNoise = ValueNoise(float2(along, across) * (laneCount / laneExtent), laneCount, 7);
                 float lane = saturate((1.0 - abs(laneNoise * 2.0 - 1.0)) * 2.0 - 1.0) * bandMask;
 
                 float density = saturate(detail * bandMask - lane * _LaneDepth);
@@ -305,9 +342,9 @@ Shader "PixelEngine/Starfield Bake"
                 color = lerp(color, nebula, saturate(tone * _NebulaCover * 1.4));
 
                 // Three star layers, slow and dense far away, fast and sparse near the camera.
-                float3 stars = StarLayer(field, 22.0, 1.0, 0.40, _Seed);
-                stars += StarLayer(field, 18.0, 0.8, 0.65, _Seed * 1.31 + 3.7);
-                stars += StarLayer(field, 15.0, 0.55, 1.0, _Seed * 2.17 + 9.1);
+                float3 stars = StarLayer(field, 22.0, 1.0, 0.40, 0);
+                stars += StarLayer(field, 18.0, 0.8, 0.65, 1);
+                stars += StarLayer(field, 15.0, 0.55, 1.0, 2);
 
                 color += stars * _StarStrength;
 
