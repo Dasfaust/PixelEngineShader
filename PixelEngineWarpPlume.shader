@@ -8,8 +8,11 @@
 // makes the sheath read as a curve and not as a decal. The downstream term spends the sheath along the tail.
 // The edge term tapers the wrap ends, so the ends that reach behind the sides do not stop on a hard line.
 //
-// The plate draws additive with ZTest Always. A platform that travels away from the camera puts its sheath
-// behind the hull in depth, and a depth test the hull can win would hide the burn.
+// The draw state is authored on the material: source and destination blend, depth write, cull mode, and
+// the double sided normals toggle. The shipped state is SrcAlpha over OneMinusSrcAlpha, no depth write,
+// cull off, and the double sided rule on. The queue is Transparent, which is where Unity sorts by camera
+// distance, and a surface that writes no depth needs that sorting. The surface writes no depth and joins
+// no depth prepass, so it occludes nothing and is occluded by the hull it wraps.
 Shader "PixelEngine/Warp Plume"
 {
     Properties
@@ -26,7 +29,6 @@ Shader "PixelEngine/Warp Plume"
         _PlumeTurbulence("Filament Length Scale", Range(0.05, 8)) = 1.2
         _PlumeSpeed("Scroll Speed", Range(0, 8)) = 1
         _PlumeCells("Grain Cells", Range(1, 128)) = 28
-        _PlumeDepthAlphaMin("Prepass Alpha Floor", Range(0, 1)) = 0.04
         [Header(Transparency and Blending)]
         [Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend("Source Blend", Float) = 5
         [Enum(UnityEngine.Rendering.BlendMode)] _DstBlend("Destination Blend", Float) = 10
@@ -45,7 +47,7 @@ Shader "PixelEngine/Warp Plume"
         Tags { "Queue" = "Transparent" }
         Tags
         {
-            "RenderType" = "Opaque"
+            "RenderType" = "Transparent"
             "RenderPipeline" = "UniversalPipeline"
         }
 
@@ -74,7 +76,6 @@ Shader "PixelEngine/Warp Plume"
             float _PlumeTurbulence;
             float _PlumeSpeed;
             float _PlumeCells;
-            float _PlumeDepthAlphaMin;
             float _PlumeDebugIntensity;
             float _PlumeDebugAlpha;
         CBUFFER_END
@@ -92,7 +93,6 @@ Shader "PixelEngine/Warp Plume"
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeTurbulence)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeSpeed)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeCells)
-                UNITY_DOTS_INSTANCED_PROP(float, _PlumeDepthAlphaMin)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeDebugIntensity)
                 UNITY_DOTS_INSTANCED_PROP(float, _PlumeDebugAlpha)
             UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
@@ -108,7 +108,6 @@ Shader "PixelEngine/Warp Plume"
             #define _PlumeTurbulence    UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeTurbulence)
             #define _PlumeSpeed         UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeSpeed)
             #define _PlumeCells         UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeCells)
-            #define _PlumeDepthAlphaMin UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeDepthAlphaMin)
             #define _PlumeDebugIntensity UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeDebugIntensity)
             #define _PlumeDebugAlpha    UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _PlumeDebugAlpha)
         #endif
@@ -202,8 +201,19 @@ Shader "PixelEngine/Warp Plume"
                 float mask = PlumeMask(uv, normalWS, intensity, _PlumeFacing, _PlumePower,
                     _PlumeEdge, _PlumeFilaments, _PlumeFilamentsFloor, _PlumeTurbulence, _PlumeSpeed,
                     _PlumeCells, _WarpFlowPhase, travel, facing);
-                float alpha = saturate(_PlumeIntensity * mask);
-                alpha = lerp(alpha, saturate(_PlumeDebugAlpha) * intensity, saturate(_PlumeDebugAlpha));
+                // The alpha a transparent surface outputs is the number the blend multiplies by, so it is
+                // the whole answer about opacity. Three numbers own it: the brightness mask, the authored
+                // strength, and the authored colour alpha. The colour alpha is an author's knob and the
+                // code must read it, because a colour with no alpha effect on an alpha-blended surface
+                // is a knob that does not turn.
+                float alpha = saturate(mask * _PlumeIntensity * _PlumeColor.a);
+                if (saturate(_PlumeDebugAlpha) > 0.0f)
+                {
+                    // A measurement pins the alpha without touching the mask terms. The shipped material
+                    // stands at zero here, which is the path the code takes.
+                    alpha = saturate(_PlumeDebugAlpha * intensity);
+                }
+
                 float3 colour = lerp(_PlumeColor.rgb, _PlumeHotColor.rgb,
                     pow(saturate(1.0f - uv.y), 3.0f) * facing);
                 return float4(colour, alpha);
@@ -211,82 +221,5 @@ Shader "PixelEngine/Warp Plume"
             ENDHLSL
         }
 
-        Pass
-        {
-            Name "DepthNormals"
-            Tags { "LightMode" = "DepthNormals" }
-
-            ZWrite [_ZWrite]
-            Cull [_Cull]
-
-            HLSLPROGRAM
-            #pragma vertex DepthNormalsVertex
-            #pragma fragment DepthNormalsFragment
-            #pragma target 4.5
-            #pragma multi_compile_instancing
-            #pragma instancing_options renderinglayer
-            #pragma multi_compile _ DOTS_INSTANCING_ON
-            #pragma shader_feature_local _DEBUG_PLUME
-            #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS
-
-            struct Attributes
-            {
-                float4 positionOS : POSITION;
-                float3 normalOS : NORMAL;
-                float2 uv : TEXCOORD0;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
-            };
-
-            struct Interpolators
-            {
-                float4 positionCS : SV_POSITION;
-                float3 normalWS : TEXCOORD0;
-                float2 uv : TEXCOORD1;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
-            };
-
-            Interpolators DepthNormalsVertex(Attributes input)
-            {
-                Interpolators output = (Interpolators)0;
-                UNITY_SETUP_INSTANCE_ID(input);
-                UNITY_TRANSFER_INSTANCE_ID(input, output);
-                output.positionCS = TransformWorldToHClip(TransformObjectToWorld(input.positionOS.xyz));
-                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
-                output.uv = input.uv;
-                return output;
-            }
-
-            void DepthNormalsFragment(Interpolators input, bool isFrontFace : SV_IsFrontFace, out float4 outNormalWS : SV_Target0)
-            {
-                UNITY_SETUP_INSTANCE_ID(input);
-
-#if defined(_DOUBLE_SIDED_NORMALS)
-                float3 normalWS = isFrontFace ? input.normalWS : -input.normalWS;
-#else
-                float3 normalWS = input.normalWS;
-#endif
-
-#if defined(_DEBUG_PLUME)
-                // The debug answer writes the normal for the whole footprint and clips nothing, so the
-                // prepass and the forward pass agree on what the debug run covers.
-                outNormalWS = float4(NormalizeNormalPerPixel(normalize(normalWS)), 0.0f);
-                return;
-#endif
-
-                // The clip reads the intensity the forward pass reads. A prepass computed at a fixed
-                // intensity passes the clip over the whole footprint, and the prepass writes depth, so the
-                // primed main pass resolves what sits behind against depth the plume never lights.
-                float intensity = PlumeIntensityNow(_PlumeDebugIntensity);
-                float3 travel = PlumeTravelWS(_WarpTravelWS);
-                float facing = pow(saturate(dot(normalize(normalWS), travel)), max(_PlumeFacing, 0.01f));
-                float mask = PlumeMask(saturate(input.uv), normalWS, intensity,
-                    _PlumeFacing, _PlumePower, _PlumeEdge, _PlumeFilaments, _PlumeFilamentsFloor,
-                    _PlumeTurbulence, _PlumeSpeed, _PlumeCells, _WarpFlowPhase, travel, facing);
-                clip(mask * saturate(_PlumeIntensity) - saturate(_PlumeDepthAlphaMin));
-
-                outNormalWS = float4(NormalizeNormalPerPixel(normalize(normalWS)), 0.0f);
-            }
-            ENDHLSL
-        }
     }
 }

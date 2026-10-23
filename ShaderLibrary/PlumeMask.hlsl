@@ -3,13 +3,10 @@
 
 // The warp bow plume's brightness mask, in one place for both passes of PixelEngineWarpPlume.
 //
-// The forward pass multiplies this mask by the authored strength to get its alpha. The DepthNormals
-// pass clips the same mask at an authored floor, and that is the pass's job here: the pass writes
-// depth, this project's renderer runs the prepass, and the depth the pass writes decides what the
-// primed main pass draws behind the plume. A mask term is an area that answers no light, so a
-// prepass without the clip writes depth for pixels that draw nothing, and the primed frame resolves
-// what sits behind them against depth that names nothing. The clip keeps the prepass depth and the
-// drawn pixels one set.
+// The forward pass multiplies this mask by the authored strength and by the authored colour alpha to
+// get its alpha. The plume is a transparent surface: it writes no depth and joins no depth prepass, so
+// the mask has one consumer and the mask is the whole brightness answer. Nothing here clips, because a
+// clip is a cutout rule and a cutout surface writes depth, which is the state the plasma does not have.
 //
 // The mask takes every number as an argument and reads no material constant itself. Each pass hands
 // in its own UnityPerMaterial values, so the two constant blocks stay identical, which is what a
@@ -80,9 +77,8 @@ float3 PlumeTravelWS(float4 travelWS)
 // shipped answer. The authored override exists for a measurement that must pin the intensity without a
 // commented-out line: above zero it replaces the seam, and it stands at zero in the shipped material.
 //
-// Both passes read intensity through this helper. The prepass writes depth, and its clip uses the
-// intensity, so a prepass that reads a different number from the forward pass writes depth for pixels
-// the forward pass does not light.
+// The intensity is read through this helper so the pass that lights the sheath and any future pass read
+// one number.
 float PlumeIntensityNow(float debugIntensityOverride)
 {
     float overrideValue = saturate(debugIntensityOverride);
