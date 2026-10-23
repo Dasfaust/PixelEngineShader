@@ -34,6 +34,7 @@ Shader "PixelEngine/Warp Plume"
         [Enum(UnityEngine.Rendering.BlendMode)] _DstBlend("Destination Blend", Float) = 10
         [Toggle] _ZWrite("Depth Write", Float) = 0
         [Enum(UnityEngine.Rendering.CullMode)] _Cull("Cull Mode", Float) = 0
+        [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest("Depth Test (Always draws over what it covers)", Float) = 4
         [Toggle(_PREMULTIPLY_ALPHA)] _Premultiply("Premultiply Alpha (pairs with One / OneMinusSrcAlpha)", Float) = 1
         [Toggle(_DOUBLE_SIDED_NORMALS)] _DoubleSided("Double Sided Normals", Float) = 1
 
@@ -122,7 +123,7 @@ Shader "PixelEngine/Warp Plume"
 
             Blend [_SrcBlend] [_DstBlend]
             ZWrite [_ZWrite]
-            ZTest LEqual
+            ZTest [_ZTest]
             Cull [_Cull]
 
             HLSLPROGRAM
