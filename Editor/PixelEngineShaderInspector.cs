@@ -64,8 +64,8 @@ namespace PixelEngine.Editor
                 case SurfaceType.Opaque:
                     material.renderQueue = (int)RenderQueue.Geometry;
                     material.SetOverrideTag("RenderType", "Opaque");
-                    material.SetFloat("_SourceBlend", (int)BlendMode.One);
-                    material.SetFloat("_DestBlend", (int)BlendMode.Zero);
+                    material.SetFloat("_SrcBlend", (int)BlendMode.One);
+                    material.SetFloat("_DstBlend", (int)BlendMode.Zero);
                     material.SetFloat("_ZWrite", 1);
                     material.SetFloat("_Cull", (int)CullMode.Back);
                     material.DisableKeyword("_DOUBLE_SIDED_NORMALS");
@@ -75,8 +75,8 @@ namespace PixelEngine.Editor
                 case SurfaceType.AlphaClip:
                     material.renderQueue = (int)RenderQueue.AlphaTest;
                     material.SetOverrideTag("RenderType", "TransparentCutout");
-                    material.SetFloat("_SourceBlend", (int)BlendMode.One);
-                    material.SetFloat("_DestBlend", (int)BlendMode.Zero);
+                    material.SetFloat("_SrcBlend", (int)BlendMode.One);
+                    material.SetFloat("_DstBlend", (int)BlendMode.Zero);
                     material.SetFloat("_ZWrite", 1);
                     material.SetFloat("_Cull", (int)CullMode.Off);
                     material.EnableKeyword("_DOUBLE_SIDED_NORMALS");
@@ -86,8 +86,8 @@ namespace PixelEngine.Editor
                 case SurfaceType.Transparent:
                     material.renderQueue = (int)RenderQueue.Transparent;
                     material.SetOverrideTag("RenderType", "Transparent");
-                    material.SetFloat("_SourceBlend", (int)BlendMode.SrcAlpha);
-                    material.SetFloat("_DestBlend", (int)BlendMode.OneMinusSrcAlpha);
+                    material.SetFloat("_SrcBlend", (int)BlendMode.SrcAlpha);
+                    material.SetFloat("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
                     material.SetFloat("_ZWrite", 0);
                     material.SetFloat("_Cull", (int)CullMode.Back);
                     material.DisableKeyword("_DOUBLE_SIDED_NORMALS");
