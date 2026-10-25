@@ -177,18 +177,17 @@ Shader "PixelEngine/Starfield Layer"
                 float zoom = max(_ZoomScale, 0.0001);
                 float aspect = max(_LayerAspect, 0.0001);
 
-                // Screen-space sampling: the pattern is authored in layer pixels, so a window resize
-                // keeps the star dot's pixel size and answers more cells. The snap holds the grid: the
-                // sample position lands on whole grain steps, so a dot covers whole pixels and the
-                // field reads the pixel grid the baked sky reads.
-                float2 pos = varyings.uv * layer;
+                // Screen-space sampling, and the grid the sample snaps to belongs to the pattern and
+                // not to the screen. The snap rides the pattern's own cell frame, anchored at the
+                // pattern's origin, so a roll rotates the grid with the stars and a slide carries it.
+                // A grid anchored at the layer's corner and applied before the rotation is a screen
+                // grid: the stars step along screen axes while the field turns, which reads as a
+                // picture sliding over a fixed raster instead of a sky rolling.
                 float grain = max(_Grain, 1.0);
-                pos = floor(pos / grain) * grain + 0.5 * grain;
 
-                // Rotate about the layer center in pixel units, so the spin reads circular and not
-                // sheared by the layer's aspect. The space is height-normalized: the layer spans
+                // Rotate about the layer center. The space is height-normalized: the layer spans
                 // `aspect` units across and 1 unit tall, and its center sits at 0.
-                float2 p = (pos / layer - 0.5) * float2(aspect, 1.0);
+                float2 p = (varyings.uv - 0.5) * float2(aspect, 1.0);
                 float rad = radians(_RollAngle);
                 float2 rot = float2(cos(rad), sin(rad));
 
@@ -212,6 +211,11 @@ Shader "PixelEngine/Starfield Layer"
                 float cellsPerUnit = pattern.y / zoom;
                 float2 spun = float2(p.x * rot.x - p.y * rot.y, p.x * rot.y + p.y * rot.x);
                 float2 cells = spun * cellsPerUnit + 0.5 * pattern + _Slide.xy;
+
+                // The grain step in cell units: a unit of this space is one layer height, so the
+                // authored pixel step scales by the cells per unit over the layer's pixel height.
+                float grainCells = grain * cellsPerUnit / layer.y;
+                cells = floor(cells / grainCells) * grainCells + 0.5 * grainCells;
 
                 int2 wrappedCount = max(int2(round(pattern)), int2(1, 1));
                 int2 base = int2(floor(cells));
@@ -288,5 +292,5 @@ Shader "PixelEngine/Starfield Layer"
             ENDHLSL
         }
     }
-    CustomEditor "PixelEngineShaderInspector"
+    CustomEditor "PixelEngine.Editor.PixelEngineShaderInspector"
 }
