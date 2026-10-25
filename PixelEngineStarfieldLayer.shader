@@ -55,14 +55,14 @@ Shader "PixelEngine/Starfield Layer"
         _StarBands("Brightness bands", Range(1, 16)) = 5
         _Brightness("Star brightness", Range(0, 4)) = 1.2
         _DotRadiusCells("Dot radius (star cells, rig-written)", Float) = 0.1
-        _LatticeCount("Lattice cell count (rig-written)", Vector) = (128, 72, 0, 0)
+        _PatternCells("Pattern cell count (rig-written)", Vector) = (96, 54, 0, 0)
 
         [Header(Motion)]
         _Slide("Slide (star cells at zoom 1)", Vector) = (0, 0, 0, 0)
         _ZoomScale("Pattern zoom scale", Float) = 1
         _DotZoomFactor("Dot size follows zoom (rig input)", Range(0, 1)) = 0.25
         _RollAngle("Roll angle (degrees)", Float) = 0
-        _LayerAspect("Layer aspect (width over height)", Float) = 1.7777
+        _LayerAspect("Layer aspect (width over height, rig-written)", Float) = 1.7777
         _Grain("Grain snap (layer pixels per step)", Range(1, 8)) = 1
 
         [Header(Twinkle)]
@@ -126,7 +126,7 @@ Shader "PixelEngine/Starfield Layer"
                 float _StarBands;
                 float _Brightness;
                 float _DotRadiusCells;
-                float4 _LatticeCount;
+                float4 _PatternCells;
                 float4 _Slide;
                 float _ZoomScale;
                 float _DotZoomFactor;
@@ -186,21 +186,34 @@ Shader "PixelEngine/Starfield Layer"
                 pos = floor(pos / grain) * grain + 0.5 * grain;
 
                 // Rotate about the layer center in pixel units, so the spin reads circular and not
-                // sheared by the layer's aspect.
+                // sheared by the layer's aspect. The space is height-normalized: the layer spans
+                // `aspect` units across and 1 unit tall, and its center sits at 0.
                 float2 p = (pos / layer - 0.5) * float2(aspect, 1.0);
                 float rad = radians(_RollAngle);
                 float2 rot = float2(cos(rad), sin(rad));
-                p = float2(p.x * rot.x - p.y * rot.y, p.x * rot.y + p.y * rot.x);
 
-                // Cells at the live zoom: the pattern scales about the center, so the cell count across
-                // the screen divides by the scale. The slide arrives at the zoom-1 rate, so it
-                // multiplies by the same scale and carries the same sky distance at every zoom.
-                float2 cells = (p + 0.5) * _LatticeCount.xy + _Slide.xy * zoom;
+                // Two authored numbers set the whole geometry, and the rig writes both: the pattern's cell
+                // count and the zoom. The pattern's count never moves with zoom. The screen shows
+                // count ÷ zoom of those cells, and that division is the magnification: the same cells
+                // spread over fewer screen pixels.
+                //
+                // One scalar carries the cell basis for both axes. A unit of this rotated space is one
+                // layer height, and a cell is layerWidth × zoom ÷ pattern.x pixels on screen, so the
+                // pattern's down count divided by the zoom answers the cells per unit across and down
+                // alike. One number is why the cell stays square at every zoom, where two counts that
+                // round on their own boundaries would answer a stretched cell.
+                //
+                // The center offset and the wrap both read the pattern's count. The offset puts the layer
+                // center on the pattern center, so a zoom magnifies about the center and not about a
+                // corner, and the center cell holds its answer at every zoom. The wrap repeats the
+                // pattern at its own width, so a slide past the pattern edge reads the cells it left;
+                // wrapping at the on-screen count would repeat the pattern inside one screen.
+                float2 pattern = max(_PatternCells.xy, float2(1.0, 1.0));
+                float cellsPerUnit = pattern.y / zoom;
+                float2 spun = float2(p.x * rot.x - p.y * rot.y, p.x * rot.y + p.y * rot.x);
+                float2 cells = spun * cellsPerUnit + 0.5 * pattern + _Slide.xy;
 
-                // The lattice wraps on its own cell count, so a slide past the pattern edge reads the
-                // cells it left. The rig writes the count from the live cell count, so the pattern width
-                // holds the screen at every zoom, and a dot's radius arrives in cells from the same read.
-                int2 count = max(int2(round(_LatticeCount.xy)), int2(1, 1));
+                int2 wrappedCount = max(int2(round(pattern)), int2(1, 1));
                 int2 base = int2(floor(cells));
                 float radius = max(_DotRadiusCells, 0.0001);
 
@@ -212,7 +225,7 @@ Shader "PixelEngine/Starfield Layer"
                 {
                     for (int ox = -1; ox <= 1; ox++)
                     {
-                        int2 cell = WrapLattice(base + int2(ox, oy), count);
+                        int2 cell = WrapLattice(base + int2(ox, oy), wrappedCount);
                         int salt = _Seed;
 
                         // Three reads per cell: presence, the center inside the cell, and the dot's
