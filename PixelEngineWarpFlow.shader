@@ -13,6 +13,13 @@ Shader "PixelEngine/Warp Flow"
         _Accel("Acceleration Exponent (speed ratio e^k across path)", Float) = 2
         _RayPath("Ray Path (UV length)", Float) = 1.2
 
+        [Header(Zoom)]
+        // The field scale about the screen center. The rig writes the live viewport's
+        // UV zoom level here, so the streak field magnifies with the view and moves no
+        // offset: the layer follows the viewport zoom, and it carries no parallax of
+        // its own. 1 is the authored field.
+        _UVZoom("UV Zoom (field scale about center)", Float) = 1
+
         [Header(Size)]
         _RayWidth("Ray Width (sector fraction)", Range(0.05, 1)) = 0.35
         _TailSharp("Tail Sharpness (streak length along ray)", Range(0.5, 8)) = 3
@@ -104,6 +111,7 @@ Shader "PixelEngine/Warp Flow"
                 float _FlowPhase;
                 float _Accel;
                 float _RayPath;
+                float _UVZoom;
                 float _RayWidth;
                 float _TailSharp;
                 float _Stagger;
@@ -209,11 +217,11 @@ Shader "PixelEngine/Warp Flow"
             // arc left or right of its sector center, signed by a hash of the
             // ray and the streak's cell index, so streaks run out of line
             // laterally, at random; the offset holds for the streak's whole run,
-            // and 0 runs them on the center line. The UV answers on the warp
-            // texture's grid cell times _PixelScale: the rig renders the
-            // texture at screen resolution divided by its render scale and
-            // the canvas upscales it point-filtered, so the streak pixels are
-            // whole, uniform, and answer no screen-resolution grid.
+            // and 0 runs them on the center line. The field coordinate answers on the
+            // warp texture's grid cell times _PixelScale, in field units: the rig
+            // renders the texture at screen resolution divided by its render scale and
+            // the canvas upscales it point-filtered, so the streak pixels are whole,
+            // uniform, magnified with the zoom, and answer no screen-resolution grid.
             //
             // Color: the majority of rays answer the base color. _ColorIntensity
             // is the fraction that carries a palette color instead, one of
@@ -236,12 +244,24 @@ Shader "PixelEngine/Warp Flow"
 
             half4 frag(Varyings varyings) : SV_Target
             {
+                // The field coordinate: the screen UV scaled about the screen center by
+                // the zoom level the rig writes. The whole field reads through this
+                // number - the vanishing point, the path, the fades, and the streak
+                // spacing are authored in field units at zoom 1 - so a zoomed view reads
+                // the same field larger about the center, and the vanishing point slides
+                // outward by the same factor, which is what a narrower window over a
+                // magnified field answers. The mapping divides, so the floor guards it.
+                float zoom = max(_UVZoom, 0.01);
+                float2 field = (varyings.uv - 0.5) / zoom + 0.5;
+
                 // Streak pixels ride the warp texture's grid cell times the
-                // authored pixel scale: the rig writes the cell as one warp
-                // texture pixel, so a streak pixel is render scale x pixel
-                // scale screen pixels wide, uniform across the frame.
+                // authored pixel scale, measured in field units: the rig writes the cell
+                // as one warp texture pixel, so a streak pixel is render scale x pixel
+                // scale x zoom screen pixels wide, uniform across the frame. Zooming the
+                // view magnifies the streak pixel with the field, the way the viewport
+                // magnifies a texel.
                 float2 cell = _GridCell.xy * max(_PixelScale, 1.0);
-                float2 p = floor(varyings.uv / cell) * cell + 0.5 * cell;
+                float2 p = floor(field / cell) * cell + 0.5 * cell;
 
                 float2 d = p - _VanishPoint.xy;
                 float dist = length(d);
