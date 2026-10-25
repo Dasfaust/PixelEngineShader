@@ -223,13 +223,25 @@ Shader "PixelEngine/Starfield Layer"
 
                 half4 color = half4(0.0, 0.0, 0.0, 0.0);
 
+                // The wrap repeats the field, and it wraps the field's identity and never its position.
+                // The hash reads, the star's place inside its cell, its size and brightness rolls, its
+                // twinkle phase, and its colour all come from the wrapped index, so the pattern of stars
+                // is the pattern authored and it recurs every pattern cells. The position the distance
+                // test uses is the unwrapped lattice coordinate, because the pixel's own cell coordinate
+                // grows without bound under a slide, a zoom, and a roll. A position taken from the
+                // wrapped index lands inside [0, pattern) while the pixel sits outside it, so every
+                // distance past the pattern edge measures a full pattern width, every star fails the
+                // test, and a slide past the edge leaves the screen blank where the recycled stars should
+                // appear. Identity wraps; position tiles.
+                //
                 // A star sits off its cell center by up to 0.7 of a cell, so a star in a neighbour cell
                 // can reach this pixel. The 3x3 sweep reads the nine lattice cells around the pixel.
                 for (int oy = -1; oy <= 1; oy++)
                 {
                     for (int ox = -1; ox <= 1; ox++)
                     {
-                        int2 cell = WrapLattice(base + int2(ox, oy), wrappedCount);
+                        int2 lattice = base + int2(ox, oy);
+                        int2 cell = WrapLattice(lattice, wrappedCount);
                         int salt = _Seed;
 
                         // Three reads per cell: presence, the center inside the cell, and the dot's
@@ -240,7 +252,7 @@ Shader "PixelEngine/Starfield Layer"
                             continue;
                         }
 
-                        float2 center = (float2)cell + 0.15 + 0.7 * float2(
+                        float2 center = (float2)lattice + 0.15 + 0.7 * float2(
                             Hash01(cell, salt * 7 + 2),
                             Hash01(cell, salt * 7 + 3));
                         float sizeRoll = Hash01(cell, salt * 7 + 4);
