@@ -102,6 +102,12 @@ Shader "PixelEngineLit"
 
                 #pragma shader_feature_local_vertex _ _BILLBOARDING_CYLINDRICAL
                 #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
+                // The block draw's instanced path. The keyword carries no stage suffix on purpose: the
+                // vertex stage reads the instance row for the size class and scales the unit cube, and
+                // the fragment stage reads the same row for the tint. A stage suffix compiles the other
+                // stage's conditional code out, and the blocks draw with the wrong look with nothing
+                // logged. The instance row's w packs the size class in bits 6 and 7; see the layout
+                // note in ShaderLibrary/BlockInstancing.hlsl.
                 #pragma shader_feature_local _ _BLOCK_INSTANCED
                 #pragma shader_feature_local_fragment _ _ALPHA_CUTOUT
                 #pragma shader_feature_local_fragment _ _DOUBLE_SIDED_NORMALS
@@ -169,6 +175,12 @@ Shader "PixelEngineLit"
 
                 #pragma shader_feature_local_vertex _BILLBOARDING_CYLINDRICAL
                 #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
+                // The block draw's instanced path. The keyword carries no stage suffix on purpose: the
+                // vertex stage reads the instance row for the size class and scales the unit cube, and
+                // the fragment stage reads the same row for the tint. A stage suffix compiles the other
+                // stage's conditional code out, and the blocks draw with the wrong look with nothing
+                // logged. The instance row's w packs the size class in bits 6 and 7; see the layout
+                // note in ShaderLibrary/BlockInstancing.hlsl.
                 #pragma shader_feature_local _ _BLOCK_INSTANCED
                 #pragma shader_feature_local_fragment _ALPHA_CUTOUT
                 #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS
@@ -202,6 +214,12 @@ Shader "PixelEngineLit"
 
                 #pragma shader_feature_local_vertex _BILLBOARDING_CYLINDRICAL
                 #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
+                // The block draw's instanced path. The keyword carries no stage suffix on purpose: the
+                // vertex stage reads the instance row for the size class and scales the unit cube, and
+                // the fragment stage reads the same row for the tint. A stage suffix compiles the other
+                // stage's conditional code out, and the blocks draw with the wrong look with nothing
+                // logged. The instance row's w packs the size class in bits 6 and 7; see the layout
+                // note in ShaderLibrary/BlockInstancing.hlsl.
                 #pragma shader_feature_local _ _BLOCK_INSTANCED
                 #pragma shader_feature_local_fragment _ALPHA_CUTOUT
                 #pragma shader_feature_local_fragment _DOUBLE_SIDED_NORMALS

@@ -3,9 +3,29 @@
 
 // Per-instance block data for the indirect block draw.
 //
-// The buffer is two float4 elements per instance: element 2i is the cell center (xyz, w unused),
-// element 2i + 1 is the instance color (rgba). The C# side writes the pairs and binds the buffer
-// globally; the draw call's instance index selects the pair.
+// The buffer is two float4 elements per instance and the layout does not grow: element 2i is the
+// center of the block's own box (xyz) and a packed word (w), element 2i + 1 is the instance color
+// (rgba). The C# side writes the pairs and binds the buffer globally; the draw call's instance
+// index selects the pair.
+//
+// The word in w sits in the low mantissa: a float32 holds an integer below 2^24 exactly, so the
+// bit fields below are the word's own layout and not the float's.
+//
+//   bits 0..5   the six-face occupancy mask. The block draw writes zeros there today, and the
+//               plasma writes its own mask into its own instance buffer. Both buffers keep the mask
+//               in the same bits, so one reader names one layout and a later reader does not spend
+//               a bit twice.
+//   bits 6..7   the size class: halvings from one whole cell. A whole cell is class 0, half a cell
+//               is 1, a quarter is 2, and an eighth would be 3. A row that carries no size class
+//               decodes as class 0 and draws at the cell's full scale.
+//   bits 8..31  spare, 24 bits.
+//
+// The class is the block's own size, and it is one mapping on both sides: the C# side that writes
+// the word and this decode name the same halvings. The mesh is a unit cube, so the vertex stage
+// multiplies it by the class's scale. That step is a constant halving, which is the lattice this
+// shader ships: 4 subcells per cell, 1 world unit per cell, and 1 world unit per level. A config
+// that moves those numbers needs the same change here, and the C# side reads its own config so a
+// drift fails a test beside this constant.
 //
 // The keyword is a shader_feature_local, so only the material that requests it compiles the
 // instanced variants. No other material using this shader pays for the path.
@@ -81,9 +101,29 @@ float4 GetBlockInstanceColor(uint instanceID)
 //
 // So the placement never touches the object-to-world matrices. The instance pair IS the world cell
 // center, the mesh is a unit cube centered at the origin, and the view matrices do the rest.
+// The size class the row carries: the block's own span as halvings from one whole cell.
+uint GetBlockSizeClass(uint instanceID)
+{
+    // The word arrives as a float, so it rounds before it shifts. The stored value never exceeds
+    // 2^24, so the round is exact and not a tolerance.
+    float word = GetBlockInstancePosition(instanceID).w;
+    return ((uint)round(word) >> 6u) & 3u;
+}
+
+// One side of the block's box in world units. The mesh is a unit cube, so the scale is the side:
+// a whole cell draws at 1, a quarter cell at 0.25. See the lattice note in the layout comment
+// above — the step is a constant halving of a cell.
+float GetBlockWorldScale(uint instanceID)
+{
+    return 1.0f / (float)(1u << GetBlockSizeClass(instanceID));
+}
+
 float3 GetBlockPositionWS(float3 positionOS, uint instanceID)
 {
-    return positionOS + GetBlockInstancePosition(instanceID).xyz;
+    // The cube scales about its own center before the center moves, so the position rule and the
+    // size in the same row describe one box: the anchor corner plus half the scaled side is where
+    // the scaled cube's center sits. The C# side writes that center from the same span.
+    return positionOS * GetBlockWorldScale(instanceID) + GetBlockInstancePosition(instanceID).xyz;
 }
 
 #endif
