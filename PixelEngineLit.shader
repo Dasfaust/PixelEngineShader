@@ -55,9 +55,7 @@ Shader "PixelEngineLit"
         _InnerOutlineThreshold("Inner Outline Threshold", float) = 0.2
         _InnerOutlineBias("Inner Outline Bias", vector) = (1, 1, 1, 0)
 
-        [Header(Pixel Stabilization)]
         _PixelsPerUnit("Pixels Per Unit", float) = 64
-        [Toggle(_STABILIZATION_SNAP_WORLD_POS)] _StabilizationSnapWorldPos("Snap World Position", float) = 0
         
         [Header(Rendering Options)]
         _Cutoff("Alpha Clip Threshold", Range(0, 1)) = 0.5
@@ -101,7 +99,6 @@ Shader "PixelEngineLit"
                 #pragma multi_compile _ DOTS_INSTANCING_ON
 
                 #pragma shader_feature_local_vertex _ _BILLBOARDING_CYLINDRICAL
-                #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
                 // The block draw's instanced path. The keyword carries no stage suffix on purpose: the
                 // vertex stage reads the instance row for the size class and scales the unit cube, and
                 // the fragment stage reads the same row for the tint. A stage suffix compiles the other
@@ -174,7 +171,6 @@ Shader "PixelEngineLit"
                 #pragma multi_compile _ DOTS_INSTANCING_ON
 
                 #pragma shader_feature_local_vertex _BILLBOARDING_CYLINDRICAL
-                #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
                 // The block draw's instanced path. The keyword carries no stage suffix on purpose: the
                 // vertex stage reads the instance row for the size class and scales the unit cube, and
                 // the fragment stage reads the same row for the tint. A stage suffix compiles the other
@@ -213,7 +209,6 @@ Shader "PixelEngineLit"
                 #pragma multi_compile _ DOTS_INSTANCING_ON
 
                 #pragma shader_feature_local_vertex _BILLBOARDING_CYLINDRICAL
-                #pragma shader_feature_local_vertex _ _STABILIZATION_SNAP_WORLD_POS
                 // The block draw's instanced path. The keyword carries no stage suffix on purpose: the
                 // vertex stage reads the instance row for the size class and scales the unit cube, and
                 // the fragment stage reads the same row for the tint. A stage suffix compiles the other
