@@ -46,8 +46,12 @@ float4 BlendOutlines(float4 diffuseColor, float4 outerColor, float4 innerColor, 
     float3 fragNormal = SampleSceneNormal(screenUv);
 
     #if defined(_OUTLINES_PERSPECTIVE)
-        // Adjust outline size to be smaller as the camera gets further away
-        float4 objectOriginWS = mul(unity_ObjectToWorld, float4(0.0f, 0.0f, 0.0f, 1.0f));
+        // Adjust outline size to be smaller as the camera gets further away.
+        // UNITY_MATRIX_M is the pipeline's name for the object-to-world matrix. It is unity_ObjectToWorld on a
+        // plain draw, and core/UnityInstancing.hlsl redefines it to the DOTS instanced one when the variant carries
+        // DOTS_INSTANCING_ON, where universal/UnityInput.hlsl declares no unity_ObjectToWorld at all. The origin a
+        // RenderParams submission carries is Unity's own value for the whole submission, not one instance's origin.
+        float4 objectOriginWS = mul(UNITY_MATRIX_M, float4(0.0f, 0.0f, 0.0f, 1.0f));
         float distanceWS = distance(_WorldSpaceCameraPos, objectOriginWS.xyz);
         float distancePercentage = Remap(distanceWS, float2(0, _PerspectiveOutlineMaxDistance), float2(1.0f, 0));
         outlineSize = floor(outlineSize * distancePercentage + 0.5f);
