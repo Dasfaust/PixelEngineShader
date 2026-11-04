@@ -120,40 +120,11 @@ float3 XYZToLab(float3 xyz)
     return float3(l, a, b);
 }
 
-float3 SnapWorldPositionToPixelGrid(float3 worldPos)
-{
-    // This function snaps a world position to the camera's pixel grid,
-    // accounting for camera rotation. It mirrors the logic from
-    // SubpixelOrthographicCamera.WorldPositionToPixelGrid.
-
-    // Get camera's right and up vectors in world space from the inverse view matrix.
-    float3 right = UNITY_MATRIX_I_V[0].xyz;
-    float3 up    = UNITY_MATRIX_I_V[1].xyz;
-
-    // Project the world position onto the camera's local axes.
-    float projX = dot(worldPos, right);
-    float projY = dot(worldPos, up);
-
-    // Calculate the size of a pixel in world units.
-    float unitsPerPixel = 1.0 / _PixelsPerUnit;
-
-    // Snap the projected coordinates to the pixel grid.
-    float snappedX = floor(projX / unitsPerPixel) * unitsPerPixel;
-    float snappedY = floor(projY / unitsPerPixel) * unitsPerPixel;
-
-    // Subtract the remainder from the original position to get the snapped position.
-    return worldPos - right * (projX - snappedX) - up * (projY - snappedY);
-}
-
-
 VertexPositionInputs _GetVertexPositionInputs(float3 positionOS)
 {
     VertexPositionInputs input;
     input.positionWS = TransformObjectToWorld(positionOS);
     
-    #if defined(_STABILIZATION_SNAP_WORLD_POS)
-    input.positionWS = SnapWorldPositionToPixelGrid(input.positionWS);
-    #endif
     
     input.positionVS = TransformWorldToView(input.positionWS);
     input.positionCS = TransformWorldToHClip(input.positionWS);
