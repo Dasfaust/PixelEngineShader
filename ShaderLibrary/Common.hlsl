@@ -17,6 +17,8 @@ TEXTURE2D(_MaskMap);
 SAMPLER(sampler_MaskMap);
 TEXTURE2D(_RampMap);
 SAMPLER(sampler_RampMap);
+TEXTURE2D(_SecondaryMap);
+SAMPLER(sampler_SecondaryMap);
 
 // The material property block the SRP lays out per material.
 //
@@ -38,6 +40,7 @@ CBUFFER_START(UnityPerMaterial)
     float4 _NormalMap_TexelSize;
     float4 _EmissionMap_TexelSize;
     float4 _MaskMap_TexelSize;
+    float4 _SecondaryMap_TexelSize;
     float _Cutoff;
     float4 _DiffuseColor;
     float _NormalStrength;
@@ -167,8 +170,35 @@ float2 UpscaleUVs(float2 atlasUv, float4 texelSize)
     return (floor(tx) + 0.5 + txOffset) * texelSize.xy;
 }
 
+// Secondary color. The albedo sheet is authored grayscale, so its luminance carries the shading
+// shape and the hue comes from the material's Diffuse Base Color. _SecondaryMap paints a per-texel
+// hue on top of that mix, and the map's own alpha is the weight: alpha 0 keeps the base color,
+// alpha 1 wears the map's color, and a value between blends the two. The keyword is the contract —
+// a material that enables it must assign the map, because with no map assigned Unity binds black
+// and the surface draws black.
+float4 SampleSecondaryColor(float2 atlasUv)
+{
+    #if defined(_TEXTURE_SAMPLING_TYPE_UPSCALED)
+        return SAMPLE_TEXTURE2D_GRAD(_SecondaryMap, sampler_SecondaryMap, UpscaleUVs(atlasUv, _SecondaryMap_TexelSize), ddx(atlasUv), ddy(atlasUv));
+    #endif
+
+    return SAMPLE_TEXTURE2D_LOD(_SecondaryMap, sampler_SecondaryMap, atlasUv, 0);
+}
+
 float4 SampleDiffuseColor(float2 atlasUv)
 {
+    #if defined(_SECONDARY_COLOR_MAP)
+        float4 baseColor;
+        #if defined(_TEXTURE_SAMPLING_TYPE_UPSCALED)
+            baseColor = SAMPLE_TEXTURE2D_GRAD(_DiffuseMap, sampler_DiffuseMap, UpscaleUVs(atlasUv, _DiffuseMap_TexelSize), ddx(atlasUv), ddy(atlasUv)) * _DiffuseColor;
+        #else
+            baseColor = SAMPLE_TEXTURE2D_LOD(_DiffuseMap, sampler_DiffuseMap, atlasUv, 0) * _DiffuseColor;
+        #endif
+
+        float4 secondary = SampleSecondaryColor(atlasUv);
+        return float4(lerp(baseColor.rgb, secondary.rgb, saturate(secondary.a)), baseColor.a);
+    #endif
+
     #if defined(_TEXTURE_SAMPLING_TYPE_UPSCALED)
         return SAMPLE_TEXTURE2D_GRAD(_DiffuseMap, sampler_DiffuseMap, UpscaleUVs(atlasUv, _DiffuseMap_TexelSize), ddx(atlasUv), ddy(atlasUv)) * _DiffuseColor;
     #endif

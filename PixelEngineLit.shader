@@ -6,6 +6,8 @@ Shader "PixelEngineLit"
         [KeywordEnum(Upscaled, None)] _Texture_Sampling_Type("Texture Sampling Type", float) = 0
         [MainTexture][NoScaleOffset] _DiffuseMap("Diffuse Map", 2D) = "white" { }
         [MainColor] _DiffuseColor("Diffuse Base Color", color) = (1, 1, 1, 1)
+        [NoScaleOffset] _SecondaryMap("Secondary Color Map", 2D) = "black" { }
+        [Toggle(_SECONDARY_COLOR_MAP)] _SecondaryColor("Use Secondary Color Map", float) = 0
         [Normal][NoScaleOffset] _NormalMap("Normal Map", 2D) = "bump" { }
         _NormalStrength("Normal Strength", Range(0, 1)) = 1
         [NoScaleOffset] _MaskMap("Mask Map", 2D) = "white" { }
@@ -123,6 +125,7 @@ Shader "PixelEngineLit"
                 #pragma shader_feature_local_fragment _ _DEBUG_DEPTH _DEBUG_NORMALS _DEBUG_OUTLINES
                 #pragma shader_feature_local_fragment _ _TEXTURE_SAMPLING_TYPE_UPSCALED
                 #pragma shader_feature_local_fragment _ _COLOR_SPACE_CEILAB
+                #pragma shader_feature_local_fragment _ _SECONDARY_COLOR_MAP
 
                 // com.unity.render-pipelines.universal/Shaders/Lit.shader#L136
                 #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
